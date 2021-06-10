@@ -1,0 +1,27 @@
+"Phrases"
+{
+	"Objective Has Changed"
+	{
+		"en"	"Objective has changed, please re open the menu"
+	}
+
+	"Softlock Vote Success"
+	{
+		"en"	"Clone spawned at original coordinates"
+	}
+
+	"Softlock Vote Description"
+	{
+		"en"	"Clone lost objective item"
+	}
+
+	"Hit Recovery Limit"
+	{
+		"en"	"This item has been cloned too many times"
+	}
+
+	"No Items"
+	{
+		"en"	"No items available for recovery"
+	}
+}
