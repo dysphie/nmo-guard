@@ -2,6 +2,7 @@
 #include <sdkhooks>
 // #include <profiler>
 #include <textparse>
+#include <sdkhooks>
 
 // TODO: Ignore entities that haven't been seen by the player
 // TODO: System to manually add/remove entities from vote menu
@@ -168,7 +169,10 @@ enum struct ItemPreview
 	void Next(int client)
 	{
 		if (!this.previews || this.previews.Length <= 0)
-			ThrowError("ItemPreview.Next called on struct with no targetnames");
+		{
+			this.DeletePreviewEntity();
+			return;
+		}
 
 		this.cursor = (this.cursor + 1) % this.previews.Length;
 		this.DrawFromList(client);
@@ -177,7 +181,10 @@ enum struct ItemPreview
 	void Prev(int client)
 	{
 		if (!this.previews || this.previews.Length <= 0)
-			ThrowError("ItemPreview.Next called on struct with no targetnames");
+		{
+			this.DeletePreviewEntity();
+			return;
+		}
 
 		int len = this.previews.Length;
 		this.cursor = (this.cursor + len - 1) % len;
@@ -199,10 +206,7 @@ enum struct ItemPreview
 		EntData data;
 
 		if (!entityBackups.GetArray(targetname, data, sizeof(data)))
-		{
-			LogError("ItemPreview.Draw called on \"%s\" which is not in entityBackups", targetname);
 			return;
-		}
 
 		if (!(StrContains(data.classname, "func_physbox") != -1))
 		{
@@ -213,7 +217,7 @@ enum struct ItemPreview
 		int entity = CreateEntityByName(data.classname);
 		
 		if (entity == -1)
-			ThrowError("ItemPreview.Draw attempted to create unknown entity %s", data.classname);
+			return;
 
 		// Turn inventory items into props so that they cannot be equipped
 		// InventoryItemToDummy(data);
@@ -225,7 +229,7 @@ enum struct ItemPreview
 		DispatchKeyValue(entity, "disableshadows", "1");
 
 		if (!DispatchSpawn(entity))
-			ThrowError("ItemPreview.Draw failed to dispatch spawn");
+			return;
 		
 		// // Place in front of the player
 		float eyeAng[3], eyePos[3], fwd[3], right[3], up[3];
@@ -247,6 +251,7 @@ enum struct ItemPreview
 
 		GlowEntity(entity, glowColor);
 		this.previewEntRef = EntIndexToEntRef(entity);
+		SDKHook(entity, SDKHook_SetTransmit, OnPreviewEntTransmit);
 		RequestFrame(RotateEntity, this.previewEntRef);
 	}
 
@@ -297,6 +302,15 @@ char g_MapName[PLATFORM_MAX_PATH];
 bool g_Lateloaded;
 
 ItemPreview itemPreview[MAXPLAYERS_NMRIH+1];
+
+
+public Action OnPreviewEntTransmit(int entity, int client)
+{
+	if (EntIndexToEntRef(entity) != itemPreview[client].previewEntRef)
+		return Plugin_Handled;
+
+	return Plugin_Continue;
+}
 
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
@@ -1021,7 +1035,7 @@ stock float AngleNormalize(float ang)
 void SafeRemoveEntity(int entity)
 {
 	if (entity < 0)
-		ThrowError("You dummy");
+		return;
 	RemoveEntity(entity);
 }
 
