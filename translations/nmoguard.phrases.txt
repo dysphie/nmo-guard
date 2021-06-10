@@ -24,4 +24,34 @@
 	{
 		"en"	"No items available for recovery"
 	}
+
+	"Softlock Panel Title"
+	{
+		"en"	"Cycle through the available objective items"
+	}
+
+	"Softlock Panel Next"
+	{
+		"en"	"Next"
+	}
+
+	"Softlock Panel Prev"
+	{
+		"en"	"Previous"
+	}
+
+	"Softlock Panel Recover Hint"
+	{
+		"en"	"Once you've found the right item, vote to recover it"
+	}	
+
+	"Softlock Panel Recover"
+	{
+		"en"	"Vote to recover"
+	}
+
+	"Softlock Panel Exit"
+	{
+		"en"	"Exit"
+	}
 }
