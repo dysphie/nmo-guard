@@ -1,5 +1,6 @@
 # nmo-guard
-Allows recovery of lost objective items thru voting
+Allows recovery of lost objective items thru voting.
+On a successful vote a clone of the lost item will spawn at its original coordinates.
 
 ![image](https://user-images.githubusercontent.com/11559683/121577277-be363880-c9ff-11eb-8ae2-10f4417090b2.png)
 
