@@ -687,12 +687,24 @@ void ShowPreviewControls(int client)
 	int numItems = itemPreview[client].previews.Length;
 
 	Panel p = new Panel();
-	p.DrawText("Cycle through the available objective items");
-	p.DrawItem("Next", numItems > 1 ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
-	p.DrawItem("Previous", numItems > 1 ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
+
+	char buffer[1024];
+	FormatEx(buffer, sizeof(buffer), "%T", "Softlock Panel Title", client);
+	p.DrawText(buffer);
+
+	FormatEx(buffer, sizeof(buffer), "%T", "Softlock Panel Next", client);
+	p.DrawItem(buffer, numItems > 1 ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
+
+	FormatEx(buffer, sizeof(buffer), "%T", "Softlock Panel Prev", client);
+	p.DrawItem(buffer, numItems > 1 ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
+
 	p.DrawText(" ");
-	p.DrawText("Once the desired item is rendering on screen, vote to recover it");
-	p.DrawItem("Recover");
+
+	FormatEx(buffer, sizeof(buffer), "%T", "Softlock Panel Recover Hint", client);
+	p.DrawText(buffer);
+
+	FormatEx(buffer, sizeof(buffer), "%T", "Softlock Panel Recover", client);
+	p.DrawItem(buffer);
 	p.DrawText(" ");
 
 	itemPreview[client].Next(client);
