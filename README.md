@@ -5,6 +5,12 @@ Allows recovery of lost objective items
 
 ![image](https://user-images.githubusercontent.com/11559683/121577390-d908ad00-c9ff-11eb-9a9d-1375b19a0ef3.png)
 
+## Commands
+
+- `sm_softlock` or `sm_sl`
+  - Displays the softlock recovery interface
+
+
 ## ConVars
 
 - `sm_nmoguard_clone_show_blip` (1/0) (Default: 1)
