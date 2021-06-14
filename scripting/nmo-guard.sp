@@ -12,7 +12,7 @@ public Plugin myinfo =
 	name = "NMO Guard",
 	author = "Dysphie",
 	description = "Allow recovery of lost objective items",
-	version = "0.1.0",
+	version = "0.2.0",
 	url = ""
 };
 
