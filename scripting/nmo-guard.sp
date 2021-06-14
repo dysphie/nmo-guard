@@ -11,7 +11,7 @@ public Plugin myinfo =
 {
 	name = "NMO Guard",
 	author = "Dysphie",
-	description = "Allow recovery of lost objective items",
+	description = "Softlock prevention for objective mode",
 	version = "0.2.0",
 	url = ""
 };
