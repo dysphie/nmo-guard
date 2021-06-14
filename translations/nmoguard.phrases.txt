@@ -54,4 +54,9 @@
 	{
 		"en"	"Exit"
 	}
+
+	"Objective Skip"
+	{
+		"en"	"Objective skip detected, attempting to fast-forward objective chain.."
+	}
 }

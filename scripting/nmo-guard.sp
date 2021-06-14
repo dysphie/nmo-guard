@@ -25,6 +25,7 @@ public Plugin myinfo =
 #define VOTE_FAILED_GENERIC 0
 #define VOTE_FAILED_YES_MUST_EXCEED_NO 3
 #define VOTE_FAILED_RATE_EXCEEDED 2
+#define VOTE_FAILED_DISABLED 5
 #define VOTE_FAILED_ON_COOLDOWN 8
 #define VOTE_FAILED_SPECTATOR 14
 
@@ -45,6 +46,11 @@ public Plugin myinfo =
 ConVar quorumRatio;
 ConVar deadCanVote;
 ConVar allowSpec;
+
+ConVar cvAllowVote;
+ConVar cvAllowSkip;
+
+int activeObjID;
 
 Handle queuedVoteTimer;
 
@@ -79,6 +85,152 @@ StringMap entityBackups;
 char menuItemSound[PLATFORM_MAX_PATH];
 char menuExitSound[PLATFORM_MAX_PATH];
 
+stock Address operator+(Address base, int off) {
+	return base + view_as<Address>(off);
+}
+
+methodmap AddressBase {
+	property Address addr {
+		public get() { 
+			return view_as<Address>(this); 
+		}
+	}
+}
+
+int offs_UtlVectorSize;
+int offs_UtlVectorElems;
+
+methodmap UtlVector < AddressBase 
+{
+	public UtlVector(Address addr) {
+		return view_as<UtlVector>(addr);
+	}
+
+	property int size 
+	{
+		public get() 
+		{
+			return LoadFromAddress(this.addr + offs_UtlVectorSize, NumberType_Int32);
+		}
+	}
+
+	property Address elements {
+		public get() {
+			return view_as<Address>(LoadFromAddress(this.addr + offs_UtlVectorElems, NumberType_Int32));
+		}
+	}
+
+	public any Get(int idx, int elemSize = 0x4) {
+		return LoadFromAddress(this.elements + idx * elemSize, NumberType_Int32);
+	}
+}
+
+methodmap ObjectiveBoundary < AddressBase {
+
+	public ObjectiveBoundary(Address addr) {
+		return view_as<ObjectiveBoundary>(addr);
+	}
+
+	public void Finish() {
+		ObjectiveBoundary_Finish(this.addr);
+	}
+}
+
+int offs_ObjectiveID;
+int offs_ObjMgrCurObjIdx;
+int offs_ObjMgrCurObj;
+int offs_ObjMgrObjChain;
+
+methodmap Objective < AddressBase 
+{
+	public Objective(Address addr) 
+	{
+		return view_as<Objective>(addr);
+	}
+
+	property int ID 
+	{
+		public get() 
+		{ 
+			return LoadFromAddress(this.addr + offs_ObjectiveID, NumberType_Int32);
+		}
+	}
+}
+
+methodmap ObjectiveManager < AddressBase {
+
+	public ObjectiveManager(Address addr) 
+	{
+		return view_as<ObjectiveManager>(addr);
+	}
+
+	property ObjectiveBoundary currentObjectiveBoundary 
+	{
+		public get() 
+		{
+			Address addr = view_as<Address>(LoadFromAddress(this.addr + 0x7C, NumberType_Int32));
+			return ObjectiveBoundary(addr);
+		}
+	}
+
+	property int currentObjectiveIndex 
+	{
+		public get() 
+		{
+			return LoadFromAddress(this.addr + offs_ObjMgrCurObjIdx, NumberType_Int32);
+		}
+
+		public set(int value) 
+		{
+			StoreToAddress(this.addr + offs_ObjMgrCurObjIdx, value, NumberType_Int32);
+		}
+	}
+
+	property Objective currentObjective 
+	{
+		public get() 
+		{
+			Address addr = view_as<Address>(LoadFromAddress(this.addr + offs_ObjMgrCurObj, NumberType_Int32));
+			return Objective(addr);
+		}
+	}
+
+	public bool GetObjectiveChain(ArrayList arr) 
+	{
+		UtlVector chain = UtlVector(this.addr + offs_ObjMgrObjChain);
+		if (!chain)
+			return false;
+
+		int len = chain.size;
+		for (int i; i < len; i++)
+			arr.Push(chain.Get(i));
+
+		return true;
+	}
+
+	public void StartNextObjective() 
+	{
+		ObjectiveManager_StartNextObjective(this.addr);
+	}
+
+	public void CompleteCurrentObjective() 
+	{
+		ObjectiveBoundary boundary = this.currentObjectiveBoundary;
+		if (boundary)
+			boundary.Finish();
+
+		this.currentObjectiveIndex++;
+		this.StartNextObjective();
+	}
+}
+
+ObjectiveManager objMgr;
+
+Handle boundaryFinishFn;
+Handle startNextObjectiveFn;
+bool ignoreObjHooks;
+ArrayList objectiveChain;
+
 enum struct EntData
 {
 	int original;
@@ -94,6 +246,12 @@ enum struct EntData
 
 bool CheckCanCallVote(int client)
 {
+	if (!cvAllowVote.BoolValue)
+	{
+		SendFailStartVote(client, VOTE_FAILED_DISABLED, 0);
+		return false;
+	}
+
 	if (IsFakeClient(client))
 		return false;
 
@@ -266,7 +424,11 @@ enum struct ItemPreview
 	void GetRenderingName(char[] buffer, int maxlen)
 	{
 		if (!this.previews)
-			ThrowError("ItemPreview.GetRenderingName called on struct with no targetnames");
+		{
+			buffer[0] = '\0';
+			return;
+			// ThrowError("ItemPreview.GetRenderingName called on struct with no targetnames");
+		}
 
 		EntData data;
 		this.previews.GetArray(this.cursor, data, sizeof(data));
@@ -328,6 +490,9 @@ public void OnMapStart()
 
 	PrecacheModel("models/props/props_junk/watermelon01.mdl");
 	GetCurrentMap(g_MapName, sizeof(g_MapName));
+
+	if (g_Lateloaded)
+		objMgr.GetObjectiveChain(objectiveChain);
 }
 
 public void OnClientPutInServer(int client)
@@ -358,6 +523,9 @@ public void OnPluginStart()
 	cvBlip = CreateConVar("sm_nmoguard_clone_show_blip", "1");
 	cvMaxRecoverCount = CreateConVar("sm_nmoguard_clone_max_count", "2");
 
+	cvAllowVote = CreateConVar("sm_nmoguard_allow_item_vote", "1");
+	cvAllowSkip = CreateConVar("sv_nmoguard_allow_obj_skip", "1");
+
 	// Handle panel sounds
 	char path[PLATFORM_MAX_PATH];
 	BuildPath(Path_SM, path, sizeof(path), "configs/core.cfg");
@@ -367,6 +535,7 @@ public void OnPluginStart()
 	delete parser;
 
 	recoverHistory = new StringMap();
+	objectiveChain = new ArrayList();
 
 	// prof = new Profiler();
 
@@ -375,12 +544,7 @@ public void OnPluginStart()
 		== FeatureStatus_Unavailable)
 		SetFailState("Only supports SM 1.11 or higher");
 
-	GameData gamedata = new GameData("nmo-guard.games");
-	if (!gamedata)
-		SetFailState("Gamedata not present");
-
-	PrepSDKCalls(gamedata);
-	delete gamedata;
+	LoadGamedata();
 
 	g_cvMassLimit = FindConVar("sv_pickup_masslimit");
 	g_cvSizeLimit = FindConVar("sv_pickup_sizelimit");
@@ -397,6 +561,10 @@ public void OnPluginStart()
 	quorumRatio = FindConVar("sv_vote_quorum_ratio");
 	deadCanVote = FindConVar("sv_vote_allow_dead_call_vote");
 	allowSpec = FindConVar("sv_vote_allow_spectators");
+
+	HookEvent("objective_complete", OnObjectiveComplete, EventHookMode_Pre);
+	HookUserMessage(GetUserMessageId("ObjectiveNotify"), OnObjectiveNotify, true);
+	RegAdminCmd("sm_objskip", OnCmdNext, ADMFLAG_CHEATS);
 
 	AddCommandListener(Vote, "vote");
 
@@ -445,6 +613,7 @@ public void OnBoundaryBegin(const char[] output, int boundary, int activator, fl
 	saveBoundItemsTimer = CreateTimer(1.0, SaveBoundaryItems, 
 		EntIndexToEntRef(boundary), TIMER_FLAG_NO_MAPCHANGE);
 }
+
 public void OnPlayerExtracted(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = event.GetInt("player_id");
@@ -500,8 +669,12 @@ bool IsCarriableObjectiveItem(int entity)
 	return result;
 }
 
-void PrepSDKCalls(GameData gamedata)
+void LoadGamedata()
 {
+	GameData gamedata = new GameData("nmo-guard.games");
+	if(!gamedata)
+		SetFailState("Failed to load gamedata");
+
 	StartPrepSDKCall(SDKCall_Static);
 	PrepSDKCall_SetFromConf(gamedata, SDKConf_Signature, "CBasePlayer::CanPickupObject");
 	PrepSDKCall_AddParameter(SDKType_CBaseEntity, SDKPass_Pointer);
@@ -510,7 +683,49 @@ void PrepSDKCalls(GameData gamedata)
 	PrepSDKCall_SetReturnInfo(SDKType_Bool, SDKPass_Plain);
 	hCanPickUpObject = EndPrepSDKCall();
 	if (!hCanPickUpObject)
-		SetFailState("Failed to resolve signature for CBasePlayer::CanPickupObject");
+		SetFailState("Failed to resolve address of CBasePlayer::CanPickupObject");
+
+	objMgr = ObjectiveManager(gamedata.GetAddress("CNMRiH_ObjectiveManager"));
+	if (!objMgr)
+		SetFailState("Failed to resolve address of CNMRiH_ObjectiveManager");
+
+	StartPrepSDKCall(SDKCall_Raw);
+	PrepSDKCall_SetFromConf(gamedata, SDKConf_Signature, "CNMRiH_ObjectiveBoundary::Finish");
+	boundaryFinishFn = EndPrepSDKCall();
+	if (!boundaryFinishFn)
+		SetFailState("Failed to resolve address of CNMRiH_ObjectiveBoundary::Finish");
+
+	StartPrepSDKCall(SDKCall_Raw);
+	PrepSDKCall_SetFromConf(gamedata, SDKConf_Signature, "CNMRiH_ObjectiveManager::StartNextObjective");
+	startNextObjectiveFn = EndPrepSDKCall();
+	if (!startNextObjectiveFn)
+		SetFailState("Failed to resolve address of CNMRiH_ObjectiveManager::StartNextObjective");
+	
+	offs_ObjectiveID = gamedata.GetOffset("Objective::m_iId");
+	if (offs_ObjectiveID == -1)
+		SetFailState("Failed to resolve offset to Objective::m_iId");
+
+	offs_UtlVectorSize = gamedata.GetOffset("UtlVector::m_Size");
+	if (offs_UtlVectorSize == -1)
+		SetFailState("Failed to resolve offset to UtlVector::m_Size");
+
+	offs_ObjMgrCurObjIdx = gamedata.GetOffset("CNMRiH_ObjectiveManager::_currentObjectiveIndex");
+	if (offs_ObjMgrCurObjIdx == -1)
+		SetFailState("Failed to resolve offset to CNMRiH_ObjectiveManager::_currentObjectiveIndex");
+
+	offs_ObjMgrCurObj = gamedata.GetOffset("CNMRiH_ObjectiveManager::_currentObjective");
+	if (offs_ObjMgrCurObj == -1)
+		SetFailState("Failed to resolve offset to CNMRiH_ObjectiveManager::_currentObjective");
+
+	offs_ObjMgrObjChain = gamedata.GetOffset("CNMRiH_ObjectiveManager::_objectiveChain");
+	if (offs_ObjMgrObjChain == -1)
+		SetFailState("Failed to resolve offset to CNMRiH_ObjectiveManager::_objectiveChain");
+
+	offs_UtlVectorElems = gamedata.GetOffset("UtlVector::m_pElements");
+	if (offs_UtlVectorElems == -1)
+		SetFailState("Failed to resolve offset to UtlVector::m_pElements");
+
+	delete gamedata;
 }
 
 void OnBoundarySpawned(int boundary)
@@ -760,7 +975,7 @@ public int OnPreviewControls(Menu menu, MenuAction action, int param1, int param
 
 					if (!itemPreview[param1].Validate(param1))
 					{
-						PrintToServer("Vaidation failed");
+						// PrintToServer("Vaidation failed");
 						return;
 					}
 
@@ -821,10 +1036,13 @@ public void OnEntitySpawned(int entity, const char[] classname)
 		#error "Missing 'sdkhooks' include"
 	#endif
 
-	if (StrEqual(classname, "nmrih_objective_boundary"))
-		OnBoundarySpawned(entity);
-	else if (IsCarriableObjectiveItem(entity))
-		RequestFrame(SaveEntityByReference, EntIndexToEntRef(entity));
+	if (IsValidEdict(entity))
+	{
+		if (StrEqual(classname, "nmrih_objective_boundary"))
+			OnBoundarySpawned(entity);
+		else if (IsCarriableObjectiveItem(entity))
+			RequestFrame(SaveEntityByReference, EntIndexToEntRef(entity));		
+	}
 }
 
 void SaveEntityByReference(int entref)
@@ -990,6 +1208,14 @@ public Action OnMapReset(Event event, const char[] name, bool dontBroadcast)
 {
 	entityBackups.Clear();
 	recoverHistory.Clear();
+
+	if (!objMgr)
+		return Plugin_Continue;
+		// ThrowError("Called objMgr.objectiveChain but objMgr is null");
+	
+	objectiveChain.Clear();
+	objMgr.GetObjectiveChain(objectiveChain);
+
 	return Plugin_Continue;
 }
 
@@ -1288,4 +1514,68 @@ public Action ExpireVoteAndDeletePreviews(Handle timer)
 {
 	voteTimer = null;
 	EndVote();
+}
+
+public Action OnObjectiveNotify(UserMsg msg_id, BfRead msg, const int[] players, int playersNum, bool reliable, bool init)
+{
+	return ignoreObjHooks ? Plugin_Handled : Plugin_Continue; 
+}
+
+public void ObjectiveManager_StartNextObjective(Address addr)
+{ 
+	SDKCall(startNextObjectiveFn, addr);
+}
+
+public void ObjectiveBoundary_Finish(Address addr)
+{
+	SDKCall(boundaryFinishFn, addr);
+}
+
+public Action OnObjectiveComplete(Event event, const char[] name, bool silent)
+{
+	if (!cvAllowSkip.BoolValue || ignoreObjHooks)
+		return Plugin_Continue;
+
+	Objective pCurObj = objMgr.currentObjective;
+	if (!pCurObj)
+		return Plugin_Continue;
+
+	int doneObjIdx = objectiveChain.FindValue(event.GetInt("id"));
+	if (doneObjIdx == -1)
+	{
+		PrintToServer(PREFIX ... "Completed objective not in objective chain. WTF! Ignoring..");
+		return Plugin_Continue;
+	}
+
+	int curObjIdx = objectiveChain.FindValue(pCurObj.ID);
+	if (curObjIdx == -1)
+	{
+		PrintToServer(PREFIX ... "Current objective not in objective chain. WTF! Ignoring..");
+		return Plugin_Continue;
+	}
+
+
+	int numSkipped = doneObjIdx - curObjIdx;	
+	// PrintToServer("doneObjIdx = %d, curObjIdx = %d (Skipped %d)", doneObjIdx, curObjIdx, numSkipped);
+
+	if (numSkipped > 0)
+	{
+		PrintToChatAll(PREFIX ... "%t", "Objective Skip");
+		ignoreObjHooks = true;
+		do 
+		{
+			objMgr.CompleteCurrentObjective();
+			numSkipped--;
+		} 
+		while (numSkipped);
+		ignoreObjHooks = false;
+	}
+
+	return Plugin_Continue;
+}
+
+public Action OnCmdNext(int client, int args)
+{
+	objMgr.CompleteCurrentObjective();
+	return Plugin_Handled;
 }
