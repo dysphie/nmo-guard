@@ -48,9 +48,7 @@ ConVar deadCanVote;
 ConVar allowSpec;
 
 ConVar cvAllowVote;
-ConVar cvAllowSkip;
-
-int activeObjID;
+// ConVar cvAllowSkip;
 
 Handle queuedVoteTimer;
 
@@ -524,7 +522,7 @@ public void OnPluginStart()
 	cvMaxRecoverCount = CreateConVar("sm_nmoguard_clone_max_count", "2");
 
 	cvAllowVote = CreateConVar("sm_nmoguard_allow_item_vote", "1");
-	cvAllowSkip = CreateConVar("sv_nmoguard_allow_obj_skip", "1");
+	// cvAllowSkip = CreateConVar("sm_nmoguard_allow_obj_skip", "0");
 
 	// Handle panel sounds
 	char path[PLATFORM_MAX_PATH];
@@ -562,7 +560,7 @@ public void OnPluginStart()
 	deadCanVote = FindConVar("sv_vote_allow_dead_call_vote");
 	allowSpec = FindConVar("sv_vote_allow_spectators");
 
-	HookEvent("objective_complete", OnObjectiveComplete, EventHookMode_Pre);
+	// HookEvent("objective_complete", OnObjectiveComplete, EventHookMode_Pre);
 	HookUserMessage(GetUserMessageId("ObjectiveNotify"), OnObjectiveNotify, true);
 	RegAdminCmd("sm_objskip", OnCmdNext, ADMFLAG_CHEATS);
 
@@ -597,6 +595,8 @@ public void OnPluginStart()
 	// RegConsoleCmd("oi", OnCmdItem);
 	// RegConsoleCmd("items", OnCmdDumpItems);
 	// RegConsoleCmd("backups", OnCmdDumpBackups);
+
+	AutoExecConfig();
 }
 
 public Action OnCmdItem(int client, int args)
@@ -1531,48 +1531,47 @@ public void ObjectiveBoundary_Finish(Address addr)
 	SDKCall(boundaryFinishFn, addr);
 }
 
-public Action OnObjectiveComplete(Event event, const char[] name, bool silent)
-{
-	if (!cvAllowSkip.BoolValue || ignoreObjHooks)
-		return Plugin_Continue;
+// public Action OnObjectiveComplete(Event event, const char[] name, bool silent)
+// {
+// 	if (!cvAllowSkip.BoolValue || ignoreObjHooks)
+// 		return Plugin_Continue;
 
-	Objective pCurObj = objMgr.currentObjective;
-	if (!pCurObj)
-		return Plugin_Continue;
+// 	Objective pCurObj = objMgr.currentObjective;
+// 	if (!pCurObj)
+// 		return Plugin_Continue;
 
-	int doneObjIdx = objectiveChain.FindValue(event.GetInt("id"));
-	if (doneObjIdx == -1)
-	{
-		PrintToServer(PREFIX ... "Completed objective not in objective chain. WTF! Ignoring..");
-		return Plugin_Continue;
-	}
+// 	int doneObjIdx = objectiveChain.FindValue(event.GetInt("id"));
+// 	if (doneObjIdx == -1)
+// 	{
+// 		PrintToServer(PREFIX ... "Completed objective not in objective chain. WTF! Ignoring..");
+// 		return Plugin_Continue;
+// 	}
 
-	int curObjIdx = objectiveChain.FindValue(pCurObj.ID);
-	if (curObjIdx == -1)
-	{
-		PrintToServer(PREFIX ... "Current objective not in objective chain. WTF! Ignoring..");
-		return Plugin_Continue;
-	}
+// 	int curObjIdx = objectiveChain.FindValue(pCurObj.ID);
+// 	if (curObjIdx == -1)
+// 	{
+// 		PrintToServer(PREFIX ... "Current objective not in objective chain. WTF! Ignoring..");
+// 		return Plugin_Continue;
+// 	}
 
+// 	int numSkipped = doneObjIdx - curObjIdx;	
+// 	PrintToServer("doneObjIdx = %d, curObjIdx = %d (Skipped %d)", doneObjIdx, curObjIdx, numSkipped);
 
-	int numSkipped = doneObjIdx - curObjIdx;	
-	// PrintToServer("doneObjIdx = %d, curObjIdx = %d (Skipped %d)", doneObjIdx, curObjIdx, numSkipped);
+// 	if (numSkipped > 0)
+// 	{
+// 		PrintToChatAll(PREFIX ... "%t", "Objective Skip");
+// 		ignoreObjHooks = true;
+// 		do 
+// 		{
+// 			objMgr.CompleteCurrentObjective();
+// 			numSkipped--;
+// 		} 
+// 		while (numSkipped);
+// 		ignoreObjHooks = false;
+// 	}
 
-	if (numSkipped > 0)
-	{
-		PrintToChatAll(PREFIX ... "%t", "Objective Skip");
-		ignoreObjHooks = true;
-		do 
-		{
-			objMgr.CompleteCurrentObjective();
-			numSkipped--;
-		} 
-		while (numSkipped);
-		ignoreObjHooks = false;
-	}
-
-	return Plugin_Continue;
-}
+// 	return Plugin_Continue;
+// }
 
 public Action OnCmdNext(int client, int args)
 {
