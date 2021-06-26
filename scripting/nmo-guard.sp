@@ -12,7 +12,7 @@ public Plugin myinfo =
 	name = "NMO Guard",
 	author = "Dysphie",
 	description = "Softlock prevention for objective mode",
-	version = "0.2.0",
+	version = "0.2.1",
 	url = ""
 };
 
@@ -232,7 +232,7 @@ ArrayList objectiveChain;
 enum struct EntData
 {
 	int original;
-	bool usesPhysbox;
+	// bool usesPhysbox;
 	char targetname[MAX_TARGETNAME_LEN];
 	char classname[64];
 	char model[PLATFORM_MAX_PATH];
@@ -330,7 +330,10 @@ enum struct ItemPreview
 			return;
 		}
 
-		this.cursor = (this.cursor + 1) % this.previews.Length;
+		this.cursor++;
+		if (this.cursor >= this.previews.Length)
+			this.cursor = 0;
+
 		this.DrawFromList(client);
 	}
 
@@ -342,8 +345,10 @@ enum struct ItemPreview
 			return;
 		}
 
-		int len = this.previews.Length;
-		this.cursor = (this.cursor + len - 1) % len;
+		this.cursor--;
+		if (this.cursor < 0)
+			this.cursor = this.previews.Length - 1;
+
 		this.DrawFromList(client);
 	}
 
@@ -359,28 +364,20 @@ enum struct ItemPreview
 	void Draw(int client, const char[] targetname)
 	{
 		this.DeletePreviewEntity();
+		// PrintToServer("Draw(%s)", targetname);
 		EntData data;
 
 		if (!entityBackups.GetArray(targetname, data, sizeof(data)))
 			return;
-
-		if (!(StrContains(data.classname, "func_physbox") != -1))
-		{
-			data.spawnflags = 256;
-			strcopy(data.classname, sizeof(data.classname), "prop_dynamic_override");
-		}
 		
-		int entity = CreateEntityByName(data.classname);
-		
+		// Turn into dynamic so physics don't spam the console
+		// and inventory items cannot be equipped
+		int entity = CreateEntityByName("prop_dynamic_override");
 		if (entity == -1)
 			return;
 
-		// Turn inventory items into props so that they cannot be equipped
-		// InventoryItemToDummy(data);
-
 		DispatchKeyValue(entity, "model", data.model);
-		DispatchKeyValueFloat(entity, "modelscale", data.scale * 0.8);
-
+		DispatchKeyValueFloat(entity, "modelscale", data.scale);
 		DispatchKeyValue(entity, "disablereceiveshadows", "1");
 		DispatchKeyValue(entity, "disableshadows", "1");
 
@@ -413,6 +410,7 @@ enum struct ItemPreview
 
 	void DeletePreviewEntity()
 	{
+		// PrintToServer("ItemPreview.DeletePreviewEntity()");
 		int previewEnt = EntRefToEntIndex(this.previewEntRef);
 		if (previewEnt > MaxClients)
 			SafeRemoveEntity(previewEnt);
@@ -435,6 +433,7 @@ enum struct ItemPreview
 
 	void Delete()
 	{
+		// PrintToServer("ItemPreview.Delete()");
 		this.DeletePreviewEntity();
 		delete this.previews;
 		this.Init();
@@ -574,13 +573,15 @@ public void OnPluginStart()
 		int e = -1;
 		while ((e = FindEntityByClassname(e, "nmrih_objective_boundary")) != -1)
 			OnBoundarySpawned(e);
-			
-		int maxEnts = GetMaxEntities();
-		for (int i = MaxClients+1; i < maxEnts; i++)
-		{
-			if (IsValidEdict(i) && IsCarriableObjectiveItem(i))
-				SaveEntity(i);
-		}
+		
+		e = -1;
+		while ((e = FindEntityByClassname(e, "prop_physic*")) != -1)
+			if (IsCarriableObjectiveItem(e))
+				SaveEntity(e);	
+		e = -1;
+		while ((e = FindEntityByClassname(e, "tool_*")) != -1)
+			if (IsCarriableObjectiveItem(e))
+				SaveEntity(e);
 	}
 
 	HookEvent("nmrih_reset_map", OnMapReset, EventHookMode_Pre);
@@ -591,17 +592,11 @@ public void OnPluginStart()
 	HookEvent("player_extracted", OnPlayerExtracted);
 	HookEvent("player_death", OnPlayerDeath, EventHookMode_Pre);
 
-	// RegConsoleCmd("carry", OnCmdCarryTest);
-	// RegConsoleCmd("oi", OnCmdItem);
+	// RegConsoleCmd("carry", OnCmdCarry);
 	// RegConsoleCmd("items", OnCmdDumpItems);
 	// RegConsoleCmd("backups", OnCmdDumpBackups);
 
 	AutoExecConfig();
-}
-
-public Action OnCmdItem(int client, int args)
-{
-	PrintToServer("IsCarriableObjectiveItem() -> %d", IsCarriableObjectiveItem(GetCmdArgInt(1)));
 }
 
 public void OnBoundaryBegin(const char[] output, int boundary, int activator, float delay)
@@ -647,26 +642,23 @@ SMCResult OnKeyValue(SMCParser smc, const char[] key, const char[] value, bool k
 		strcopy(menuExitSound, sizeof(menuExitSound), value);
 }
 
-bool IsCarriableObjectiveItem(int entity)
+bool IsCarriableObjectiveItem(int entity, const char[] classname="")
 {
-	bool result;
-	// prof.Start();
-
-	if (!HasEntProp(entity, Prop_Data, "m_iName"))
+	if (classname[0] && !IsRecoverable(classname))
 		return false;
-
 
 	static char targetname[MAX_TARGETNAME_LEN];
 	if (!GetEntityTargetname(entity, targetname, sizeof(targetname)))
-		result = false;
+		return false;
 	else if (!CanBePickedUp(entity))
-		result = false;
+		return false;
 	else
-		result = g_ObjectiveItems.ContainsKey(targetname);
+		return g_ObjectiveItems.ContainsKey(targetname);
+}
 
-	// prof.Stop();
-	// // PrintToServer("VPROF IsCarriableObjectiveItem -> %f", prof.Time);
-	return result;
+bool IsRecoverable(const char[] classname)
+{
+	return !StrContains(classname, "prop_physics") || !StrContains(classname, "tool_");
 }
 
 void LoadGamedata()
@@ -762,13 +754,28 @@ public Action SaveBoundaryItems(Handle timer, int boundaryRef)
 	char targetnames[MAX_BOUNDARY_ITEMS][MAX_TARGETNAME_LEN];
 	GetBoundaryItemData(boundary, targetnames, colors);
 
-	int maxEnts = GetMaxEntities();
-
 	char targetname[MAX_TARGETNAME_LEN];
 
-	for (int i = MaxClients+1; i < maxEnts; i++)
+	int i = -1;
+	while ((i = FindEntityByClassname(i, "prop_physic*")) != -1)
 	{
-		if (!IsValidEdict(i) || !GetEntityTargetname(i, targetname, sizeof(targetname)))
+		if (!GetEntityTargetname(i, targetname, sizeof(targetname)))
+			continue;
+
+		for (int j; j < sizeof(targetnames); j++)
+		{
+			if (targetnames[j][0] && StrEqual(targetname, targetnames[j]) && CanBePickedUp(i))
+			{
+				SaveEntity(i);
+				break;
+			}
+		}
+	}
+
+	i = -1;
+	while ((i = FindEntityByClassname(i, "tool_*")) != -1)
+	{
+		if (!GetEntityTargetname(i, targetname, sizeof(targetname)))
 			continue;
 
 		for (int j; j < sizeof(targetnames); j++)
@@ -790,18 +797,6 @@ public void OnMapEnd()
 	
 	entityBackups.Clear();
 	g_ObjectiveItems.Clear();
-}
-
-stock void FreezePlayer(int client)
-{
-	int curFlags = GetEntProp(client, Prop_Send, "m_fFlags");
-	SetEntProp(client, Prop_Send, "m_fFlags", curFlags | 16 );
-}
-
-stock void UnfreezePlayer(int client)
-{
-	int curFlags = GetEntProp(client, Prop_Send, "m_fFlags");
-	SetEntProp(client, Prop_Send, "m_fFlags", curFlags & ~16 );
 }
 
 void GetRecoverableItems(ArrayList arr)
@@ -843,13 +838,18 @@ void GetRecoverableItems(ArrayList arr)
 	}
 }
 
-public Action OnCmdCarryTest(int client, int args)
+public Action OnCmdCarry(int client, int args)
 {
 	int target = GetCmdArgInt(1);
-	char classname[64];
-	GetEntityClassname(target, classname, sizeof(classname));
+	if (!IsValidEntity(target))
+	{
+		ReplyToCommand(client, "Invalid entity %d", target);
+		return Plugin_Handled;
+	}
 
-	ReplyToCommand(client, "%s -> %d", classname, IsCarriableObjectiveItem(target));
+	char classname[32];
+	GetEntityClassname(target, classname, sizeof(classname));
+	ReplyToCommand(client, "%d", IsCarriableObjectiveItem(target, classname));
 	return Plugin_Handled;
 }
 
@@ -860,7 +860,7 @@ public Action OnCmdDumpItems(int client, int args)
 	{
 		char targetname[MAX_TARGETNAME_LEN];
 		snap.GetKey(i, targetname, sizeof(targetname));
-		PrintToServer("dump_items: %s", targetname);
+		ReplyToCommand(client, "dump_items: %s", targetname);
 	}
 	delete snap;
 	return Plugin_Handled;
@@ -873,7 +873,7 @@ public Action OnCmdDumpBackups(int client, int args)
 	{
 		char targetname[MAX_TARGETNAME_LEN];
 		snap.GetKey(i, targetname, sizeof(targetname));
-		PrintToServer("backup: %s", targetname);
+		ReplyToCommand(client, "backup: %s", targetname);
 	}
 	delete snap;
 	return Plugin_Handled;
@@ -886,12 +886,14 @@ public Action OnCmdSoftlock(int client, int args)
 
 	ArrayList recoverable = new ArrayList(sizeof(EntData));
 	GetRecoverableItems(recoverable);
+	// PrintToServer("There are %d recoverables", recoverable.Length);
 
 	if (recoverable.Length > 0)
 	{
 		itemPreview[client].Delete();
 		itemPreview[client].serial = boundarySerial;
 		itemPreview[client].previews = recoverable;
+		itemPreview[client].Next(client);
 		ShowPreviewControls(client);
 	}
 	else
@@ -936,7 +938,6 @@ void ShowPreviewControls(int client)
 	p.DrawItem(buffer);
 	p.DrawText(" ");
 
-	itemPreview[client].Next(client);
 	p.CurrentKey = 10;
 	p.DrawItem("Exit");
 	p.Send(client, OnPreviewControls, 0);
@@ -1040,7 +1041,7 @@ public void OnEntitySpawned(int entity, const char[] classname)
 	{
 		if (StrEqual(classname, "nmrih_objective_boundary"))
 			OnBoundarySpawned(entity);
-		else if (IsCarriableObjectiveItem(entity))
+		else if (IsCarriableObjectiveItem(entity, classname))
 			RequestFrame(SaveEntityByReference, EntIndexToEntRef(entity));		
 	}
 }
@@ -1088,35 +1089,18 @@ void SaveEntity(int entity)
 		return;
 
 	GetEntityClassname(entity, data.classname, sizeof(data.classname));
-	if (StrContains(data.classname, "prop_physics") != -1)
-	{
-		strcopy(data.classname, sizeof(data.classname), "prop_physics_override");
-		data.spawnflags |= 1048580; // debris physics + physgun always picks up;
-	}
-	else if (StrContains(data.classname, "prop_dynamic") != -1)
-	{
-		strcopy(data.classname, sizeof(data.classname), "prop_dynamic_override");
-		data.spawnflags |= 256; // debris dynamic;
-	}
-	else
-	{
-		data.spawnflags = GetEntProp(entity, Prop_Data, "m_spawnflags");
-	}
 
+	// Some physics props need a bit of help spawning
+	if (StrEqual(data.classname, "prop_physics"))
+		StrCat(data.classname, sizeof(data.classname), "_override");
+
+	data.spawnflags = GetEntProp(entity, Prop_Data, "m_spawnflags");
+	data.scale = GetEntPropFloat(entity, Prop_Send, "m_flModelScale");
 	data.original = EntIndexToEntRef(entity);
 
-	// FIXME: Leaking func physboxes when prop gets killed, maybe?
-
-	int parent = GetEntPropEnt(entity, Prop_Data, "m_hParent");
-	data.usesPhysbox = parent != -1 && HasEntProp(parent, Prop_Data, "m_angPreferredCarryAngles");
-
 	GetEntPropVector(entity, Prop_Send, "m_vecOrigin", data.origin);
-	if (HasEntProp(entity, Prop_Data, "m_ModelName"))
-		GetEntPropString(entity, Prop_Data, "m_ModelName", data.model, sizeof(data.model));
-	if (HasEntProp(entity, Prop_Send, "m_flModelScale"))
-		data.scale = GetEntPropFloat(entity, Prop_Send, "m_flModelScale");
-	if (HasEntProp(entity, Prop_Data, "m_angRotation"))
-		GetEntPropVector(entity, Prop_Data, "m_angRotation", data.angles);
+	GetEntPropVector(entity, Prop_Data, "m_angRotation", data.angles);
+	GetEntPropString(entity, Prop_Data, "m_ModelName", data.model, sizeof(data.model));
 	entityBackups.SetArray(data.targetname, data, sizeof(data));
 }
 
@@ -1133,18 +1117,15 @@ bool CanBePickedUp(int entity)
 bool RestoreEntity(const char[] targetname)
 {
 	EntData data;
-
 	if (!entityBackups.GetArray(targetname, data, sizeof(data)))
-	{
 		return false;
-	}
+
+	// PrintToServer("RestoreEntity with spawnflags %d", data.spawnflags);
 
 	// Spawn dummy 
 	int dummy = CreateEntityByName(data.classname);
 	if (dummy == -1)
-	{
 		return false;
-	}
 
 	DispatchKeyValue(dummy, "model", data.model);
 	DispatchKeyValueFloat(dummy, "modelscale", data.scale);
@@ -1154,39 +1135,20 @@ bool RestoreEntity(const char[] targetname)
 	DispatchKeyValue(dummy, "massscale", "1");
 
 	if (!DispatchSpawn(dummy))
-	{
 		return false;
-	}
 
-	if (data.usesPhysbox)
-	{
-		int box = CreateEntityByName("func_physbox");
-		DispatchKeyValue(box, "notsolid", "0");
-		DispatchKeyValue(box, "spawnflags", "16384"); // Debris
-		SetEntityModel(box, "models/props/props_junk/watermelon01.mdl");
-		
-		DispatchSpawn(box);
-		SetEntPropVector(box, Prop_Send, "m_vecMins", {-8.0, -8.0, -8.0});
-		SetEntPropVector(box, Prop_Send, "m_vecMaxs", {8.0, 8.0, 8.0});
-
-		int effects = GetEntProp(box, Prop_Send, "m_fEffects");
-		SetEntProp(box, Prop_Send, "m_fEffects", effects|32); // EF_NODRAW
-
-		SetVariantString("!activator");
-		AcceptEntityInput(box, "SetParent", dummy);
-	}
-
-	// TODO: I don't recall why we don't just set the targetname here to
-	// make the boundary glow it, maybe client ignores parented ents?
 	int glowColor;
 	g_ObjectiveItems.GetValue(data.targetname, glowColor);
 	DispatchKeyValue(dummy, "targetname", data.targetname);
 	
+	// Why do we call this again? Shouldn't the targetname make it glow already?
 	GlowEntity(dummy, glowColor);
 
 	int recoverCount;
 	recoverHistory.GetValue(data.targetname, recoverCount);
 	recoverHistory.SetValue(data.targetname, ++recoverCount);
+
+	ActivateEntity(dummy);
 
 	// CreateTimer(3.0, ReApplyGlow, EntIndexToEntRef(dummy), TIMER_REPEAT|TIMER_FLAG_NO_MAPCHANGE);
 	return true;
@@ -1226,7 +1188,9 @@ void GlowEntity(int entity, int color)
 	if (cvBlip.BoolValue)
 		DispatchKeyValue(entity, "glowblip", "1");
 
-	SetEntProp(entity, Prop_Data, "m_clrGlowColor", color);
+	if (HasEntProp(entity, Prop_Data, "m_clrGlowColor"))
+		SetEntProp(entity, Prop_Data, "m_clrGlowColor", color);
+
 	DispatchKeyValue(entity, "glowdistance", "9999");
 	AcceptEntityInput(entity, "enableglow");
 }
