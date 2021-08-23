@@ -12,7 +12,7 @@ public Plugin myinfo =
 	name = "NMO Guard",
 	author = "Dysphie",
 	description = "Softlock prevention for objective mode",
-	version = "0.2.1",
+	version = "0.3.1",
 	url = ""
 };
 
@@ -537,9 +537,6 @@ public void OnPluginStart()
 	// prof = new Profiler();
 
 	LoadTranslations("nmoguard.phrases");
-	if (GetFeatureStatus(FeatureType_Capability, "SDKHook_OnEntitySpawned") 
-		== FeatureStatus_Unavailable)
-		SetFailState("Only supports SM 1.11 or higher");
 
 	LoadGamedata();
 
@@ -552,7 +549,6 @@ public void OnPluginStart()
 	RegConsoleCmd("sm_sl", OnCmdSoftlock);
 	RegConsoleCmd("sm_softlock", OnCmdSoftlock);
 	
-	// I don't recall why we wanted this.. let's comment it out
 	HookEntityOutput("nmrih_objective_boundary", "OnObjectiveBegin", OnBoundaryBegin);
 
 	quorumRatio = FindConVar("sv_vote_quorum_ratio");
@@ -577,7 +573,8 @@ public void OnPluginStart()
 		e = -1;
 		while ((e = FindEntityByClassname(e, "prop_physic*")) != -1)
 			if (IsCarriableObjectiveItem(e))
-				SaveEntity(e);	
+				SaveEntity(e);
+
 		e = -1;
 		while ((e = FindEntityByClassname(e, "tool_*")) != -1)
 			if (IsCarriableObjectiveItem(e))
@@ -642,11 +639,8 @@ SMCResult OnKeyValue(SMCParser smc, const char[] key, const char[] value, bool k
 		strcopy(menuExitSound, sizeof(menuExitSound), value);
 }
 
-bool IsCarriableObjectiveItem(int entity, const char[] classname="")
+bool IsCarriableObjectiveItem(int entity)
 {
-	if (classname[0] && !IsRecoverable(classname))
-		return false;
-
 	static char targetname[MAX_TARGETNAME_LEN];
 	if (!GetEntityTargetname(entity, targetname, sizeof(targetname)))
 		return false;
@@ -654,11 +648,6 @@ bool IsCarriableObjectiveItem(int entity, const char[] classname="")
 		return false;
 	else
 		return g_ObjectiveItems.ContainsKey(targetname);
-}
-
-bool IsRecoverable(const char[] classname)
-{
-	return !StrContains(classname, "prop_physics") || !StrContains(classname, "tool_");
 }
 
 void LoadGamedata()
@@ -720,7 +709,7 @@ void LoadGamedata()
 	delete gamedata;
 }
 
-void OnBoundarySpawned(int boundary)
+public void OnBoundarySpawned(int boundary)
 {
 	// Ignore dynamically spawned boundaries as it's causing issues with
 	// plugins that use them to glow custom props (e.g. backpacks)
@@ -847,9 +836,7 @@ public Action OnCmdCarry(int client, int args)
 		return Plugin_Handled;
 	}
 
-	char classname[32];
-	GetEntityClassname(target, classname, sizeof(classname));
-	ReplyToCommand(client, "%d", IsCarriableObjectiveItem(target, classname));
+	ReplyToCommand(client, "%d", IsCarriableObjectiveItem(target));
 	return Plugin_Handled;
 }
 
@@ -1031,19 +1018,26 @@ public Action TimerCreateSoftlockVote(Handle timer, int userid)
 	return Plugin_Stop;
 }
 
-public void OnEntitySpawned(int entity, const char[] classname)
+public void OnEntityCreated(int entity, const char[] classname)
 {
 	#if !defined _sdkhooks_included
 		#error "Missing 'sdkhooks' include"
 	#endif
 
-	if (IsValidEdict(entity))
-	{
-		if (StrEqual(classname, "nmrih_objective_boundary"))
-			OnBoundarySpawned(entity);
-		else if (IsCarriableObjectiveItem(entity, classname))
-			RequestFrame(SaveEntityByReference, EntIndexToEntRef(entity));		
-	}
+	if (!IsValidEdict(entity))
+		return;
+
+	if (StrEqual(classname, "nmrih_objective_boundary"))
+		SDKHook(entity, SDKHook_SpawnPost, OnBoundarySpawned);
+
+	else if (!StrContains(classname, "prop_physics") || !StrContains(classname, "tool_"))
+		SDKHook(entity, SDKHook_SpawnPost, OnPropSpawned);
+}
+
+public void OnPropSpawned(int entity)
+{
+	if (IsCarriableObjectiveItem(entity))
+		RequestFrame(SaveEntityByReference, EntIndexToEntRef(entity));
 }
 
 void SaveEntityByReference(int entref)
