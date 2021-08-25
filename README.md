@@ -1,4 +1,4 @@
-# nmo-guard
+# [NMRiH] NMO Guard
 Allows recovery of lost objective items thru voting.
 On a successful vote a clone of the lost item will spawn at its original coordinates.
 
