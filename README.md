@@ -6,11 +6,15 @@ On a successful vote a clone of the lost item will spawn at its original coordin
 
 ![image](https://user-images.githubusercontent.com/11559683/121577390-d908ad00-c9ff-11eb-9a9d-1375b19a0ef3.png)
 
-## Commands
+## Public Commands
 
 - `sm_softlock` or `sm_sl`
   - Displays the softlock recovery interface
 
+## Admin Commands
+
+- `sm_objskip`
+  - Skips the current objective 
 
 ## ConVars
 
