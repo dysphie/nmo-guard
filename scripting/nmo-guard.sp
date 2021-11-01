@@ -12,7 +12,7 @@ public Plugin myinfo =
 	name = "NMO Guard",
 	author = "Dysphie",
 	description = "Softlock prevention for objective mode",
-	version = "0.3.1",
+	version = "0.3.2",
 	url = ""
 };
 
@@ -315,7 +315,7 @@ enum struct ItemPreview
 		if (this.serial != boundarySerial)
 		{
 			this.Delete();
-			PrintToChat(client, PREFIX, "%t", "Objective Has Changed");
+			PrintToChat(client, PREFIX ... "%t", "Objective Has Changed");
 			return false;
 		}
 
