@@ -13,7 +13,7 @@ public Plugin myinfo =
 	author = "Dysphie",
 	description = "Softlock prevention for objective mode",
 	version = "0.3.2",
-	url = ""
+	url = "https://github.com/dysphie/nmo-guard"
 };
 
 #pragma semicolon 1
@@ -474,6 +474,7 @@ public Action OnPreviewEntTransmit(int entity, int client)
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
 	g_Lateloaded = late;
+	return APLRes_Success;
 }
 
 public void OnMapStart()
@@ -637,6 +638,8 @@ SMCResult OnKeyValue(SMCParser smc, const char[] key, const char[] value, bool k
 		strcopy(menuItemSound, sizeof(menuItemSound), value);
 	else if (!strcmp(key, "MenuExitSound"))
 		strcopy(menuExitSound, sizeof(menuExitSound), value);
+
+	return SMCParse_Continue;
 }
 
 bool IsCarriableObjectiveItem(int entity)
@@ -964,13 +967,13 @@ public int OnPreviewControls(Menu menu, MenuAction action, int param1, int param
 					if (!itemPreview[param1].Validate(param1))
 					{
 						// PrintToServer("Vaidation failed");
-						return;
+						return 0;
 					}
 
 					if (!CheckCanCallVote(param1))
 					{
 						itemPreview[param1].Delete();
-						return;
+						return 0;
 					}
 
 					char targetname[MAX_TARGETNAME_LEN];
@@ -979,7 +982,7 @@ public int OnPreviewControls(Menu menu, MenuAction action, int param1, int param
 					{
 						PrintToChat(param1, PREFIX ... "%t", "Hit Recovery Limit");
 						itemPreview[param1].Delete();
-						return;
+						return 0;
 					}
 					
 					strcopy(recoveringName, sizeof(recoveringName), targetname);
@@ -1004,6 +1007,8 @@ public int OnPreviewControls(Menu menu, MenuAction action, int param1, int param
 			itemPreview[param1].Delete();
 		}
 	}
+
+	return 0;
 }
 
 public Action TimerCreateSoftlockVote(Handle timer, int userid)
@@ -1461,6 +1466,7 @@ void CheckForEarlyVoteClose()
 public Action TimerEndVote(Handle timer)
 {
 	EndVote();
+	return Plugin_Continue;
 }
 
 bool CanClientCastVote(int client)
@@ -1472,6 +1478,7 @@ public Action ExpireVoteAndDeletePreviews(Handle timer)
 {
 	voteTimer = null;
 	EndVote();
+	return Plugin_Continue;
 }
 
 public Action OnObjectiveNotify(UserMsg msg_id, BfRead msg, const int[] players, int playersNum, bool reliable, bool init)
@@ -1533,6 +1540,13 @@ public void ObjectiveBoundary_Finish(Address addr)
 
 public Action OnCmdNext(int client, int args)
 {
-	objMgr.CompleteCurrentObjective();
+	if (!objMgr)
+	{
+		ReplyToCommand(client, "No running objective detected");
+	}
+	else
+	{
+		objMgr.CompleteCurrentObjective();	
+	}
 	return Plugin_Handled;
 }
