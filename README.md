@@ -44,6 +44,9 @@ For this reason it's disabled by default and a blacklist is included in `configs
 - `sm_objskip`
   - Skips the current objective 
 
+- `sm_objskip_refresh_blacklist`
+  - Refresh objective skip blacklist
+
 ## ConVars
 
 - `sm_nmoguard_clone_show_blip` (1/0) (Default: 1)
