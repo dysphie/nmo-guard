@@ -1,11 +1,34 @@
 # [NMRiH] NMO Guard
-Allows recovery of lost objective items thru voting.
-On a successful vote a clone of the lost item will spawn at its original coordinates.
+
+Offers protection against some forms of objective chain breaking, such as unreachable items or skips.
+
+## Recovering lost objective items
+
+Players can vote to recover lost objective items via `sm_softlock`. On a successful vote a clone of the lost item will spawn at its original coordinates.
 
 ![image](https://user-images.githubusercontent.com/11559683/121577277-be363880-c9ff-11eb-8ae2-10f4417090b2.png)
 
 ![image](https://user-images.githubusercontent.com/11559683/121577390-d908ad00-c9ff-11eb-9a9d-1375b19a0ef3.png)
 
+## Recovering from objective skips
+
+When an objective item is completed ahead of time, the objective chain can attempt fast-forward itself. 
+This doesn't always work, and can lead to issues on maps that fire "ObjectiveComplete" erroneously.
+For this reason it's disabled by default and a blacklist is included in `configs/nmo-guard.cfg`. Objectives listed here won't fast-forward the objective chain if they're completed ahead of time.
+
+```cpp
+"nmoguard"
+{
+	// 
+	"skip_blacklist"
+	{
+		// "map name" "objective name"
+		
+		// nmo_experiment tries to complete "Gather supplies before leaving" when the round starts
+		"nmo_experiment_v3"			"12"
+		"nmo_experiment_v3_fix"		"12"
+	}
+}```
 
 ## Requirements
 - Sourcemod 1.11 or higher
@@ -27,3 +50,9 @@ On a successful vote a clone of the lost item will spawn at its original coordin
 
 - `sm_nmoguard_clone_max_count` (Default: 2)
   - How many times an entity can be cloned
+  
+- `sm_nmoguard_allow_obj_skip`  (1/0) (Default: 0)
+  - Whether to allow the objective chain to fix itself after an objective is completed ahead of time
+  
+- `sm_nmoguard_allow_item_vote`  (1/0) (Default: 0)
+  - Whether to allow players to vote to recover lost objective items
