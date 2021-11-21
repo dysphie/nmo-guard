@@ -12,7 +12,7 @@ public Plugin myinfo =
 	name = "NMO Guard",
 	author = "Dysphie",
 	description = "Softlock prevention for objective mode",
-	version = "0.3.2",
+	version = "0.3.3",
 	url = "https://github.com/dysphie/nmo-guard"
 };
 
@@ -48,7 +48,7 @@ ConVar deadCanVote;
 ConVar allowSpec;
 
 ConVar cvAllowVote;
-// ConVar cvAllowSkip;
+ConVar cvAllowSkip;
 
 Handle queuedVoteTimer;
 
@@ -79,6 +79,7 @@ Handle hCanPickUpObject;
 
 StringMap g_ObjectiveItems;
 StringMap entityBackups;
+StringMap skipBlacklist;
 
 char menuItemSound[PLATFORM_MAX_PATH];
 char menuExitSound[PLATFORM_MAX_PATH];
@@ -394,7 +395,8 @@ enum struct ItemPreview
 		for (int i; i < sizeof(origin); i++)
 			origin[i] = eyePos[i] + (fwd[i] * 30.0) + (right[i] * 0.0) + (up[i] * 0.0);
 
-		TeleportEntity(entity, .origin=origin);
+		TeleportEntity(entity, origin, NULL_VECTOR, NULL_VECTOR);
+
 		//Freeze it in place
 		SetVariantString("!activator");
 		AcceptEntityInput(entity, "SetParent", client);
@@ -451,7 +453,7 @@ void RotateEntity(int entref)
 	angles[0] = AngleNormalize(curTime * 20.0 * 1.0);
 	angles[1] = AngleNormalize(curTime * 20.0 * 5.0);
 	angles[2] = AngleNormalize(curTime * 20.0 * 1.0);
-	TeleportEntity(entref, .angles=angles);
+	TeleportEntity(entref, NULL_VECTOR, angles, NULL_VECTOR);
 
 	RequestFrame(RotateEntity, entref);
 }
@@ -522,7 +524,7 @@ public void OnPluginStart()
 	cvMaxRecoverCount = CreateConVar("sm_nmoguard_clone_max_count", "2");
 
 	cvAllowVote = CreateConVar("sm_nmoguard_allow_item_vote", "1");
-	// cvAllowSkip = CreateConVar("sm_nmoguard_allow_obj_skip", "0");
+	cvAllowSkip = CreateConVar("sm_nmoguard_allow_obj_skip", "0");
 
 	// Handle panel sounds
 	char path[PLATFORM_MAX_PATH];
@@ -534,12 +536,13 @@ public void OnPluginStart()
 
 	recoverHistory = new StringMap();
 	objectiveChain = new ArrayList();
+	skipBlacklist = new StringMap();
 
 	// prof = new Profiler();
 
 	LoadTranslations("nmoguard.phrases");
-
 	LoadGamedata();
+	LoadSkipBlacklist();
 
 	g_cvMassLimit = FindConVar("sv_pickup_masslimit");
 	g_cvSizeLimit = FindConVar("sv_pickup_sizelimit");
@@ -556,9 +559,10 @@ public void OnPluginStart()
 	deadCanVote = FindConVar("sv_vote_allow_dead_call_vote");
 	allowSpec = FindConVar("sv_vote_allow_spectators");
 
-	// HookEvent("objective_complete", OnObjectiveComplete, EventHookMode_Pre);
+	HookEvent("objective_complete", OnObjectiveComplete, EventHookMode_Pre);
 	HookUserMessage(GetUserMessageId("ObjectiveNotify"), OnObjectiveNotify, true);
 	RegAdminCmd("sm_objskip", OnCmdNext, ADMFLAG_CHEATS);
+	RegAdminCmd("sm_objskip_refresh_blacklist", OnCmdRefreshSkipBlacklist, ADMFLAG_CHEATS);
 
 	AddCommandListener(Vote, "vote");
 
@@ -583,7 +587,7 @@ public void OnPluginStart()
 	}
 
 	HookEvent("nmrih_reset_map", OnMapReset, EventHookMode_Pre);
-	// HookEvent("objective_complete", OnObjectiveComplete);
+	HookEvent("objective_complete", OnObjectiveComplete);
 
 	// TODO: This is kinda bad, a player could potentially stop living
 	// without these events ever firing. We should SDKHook_Think instead
@@ -605,6 +609,42 @@ public void OnBoundaryBegin(const char[] output, int boundary, int activator, fl
 	delete saveBoundItemsTimer;
 	saveBoundItemsTimer = CreateTimer(1.0, SaveBoundaryItems, 
 		EntIndexToEntRef(boundary), TIMER_FLAG_NO_MAPCHANGE);
+}
+
+void LoadSkipBlacklist()
+{
+	char path[PLATFORM_MAX_PATH];
+	BuildPath(Path_SM, path, sizeof(path), "configs/nmo-guard.cfg");
+
+	KeyValues kv = new KeyValues("nmoguard");
+
+	if (!kv.ImportFromFile(path))
+	{
+		SetFailState("Missing file \"%s\"", path);
+	}
+
+	if (kv.JumpToKey("skip_blacklist"))
+	{
+		if (kv.GotoFirstSubKey(false))
+		{
+			do
+			{
+				char buffer[PLATFORM_MAX_PATH], objName[256];
+				kv.GetSectionName(buffer, sizeof(buffer));
+				kv.GetString(NULL_STRING, objName, sizeof(objName));
+
+				Format(buffer, sizeof(buffer), "%s %s", buffer, objName);
+				skipBlacklist.SetValue(buffer, true);
+			}
+			while (kv.GotoNextKey(false));	
+
+			kv.GoBack();
+		}
+
+		kv.GoBack();
+	}
+
+	delete kv;
 }
 
 public void OnPlayerExtracted(Event event, const char[] name, bool dontBroadcast)
@@ -646,11 +686,18 @@ bool IsCarriableObjectiveItem(int entity)
 {
 	static char targetname[MAX_TARGETNAME_LEN];
 	if (!GetEntityTargetname(entity, targetname, sizeof(targetname)))
+	{
 		return false;
+	}
 	else if (!CanBePickedUp(entity))
+	{
 		return false;
+	}
 	else
-		return g_ObjectiveItems.ContainsKey(targetname);
+	{
+		any val;
+		return g_ObjectiveItems.GetValue(targetname, val);
+	}
 }
 
 void LoadGamedata()
@@ -830,44 +877,44 @@ void GetRecoverableItems(ArrayList arr)
 	}
 }
 
-public Action OnCmdCarry(int client, int args)
-{
-	int target = GetCmdArgInt(1);
-	if (!IsValidEntity(target))
-	{
-		ReplyToCommand(client, "Invalid entity %d", target);
-		return Plugin_Handled;
-	}
+// public Action OnCmdCarry(int client, int args)
+// {
+// 	int target = GetCmdArgInt(1);
+// 	if (!IsValidEntity(target))
+// 	{
+// 		ReplyToCommand(client, "Invalid entity %d", target);
+// 		return Plugin_Handled;
+// 	}
 
-	ReplyToCommand(client, "%d", IsCarriableObjectiveItem(target));
-	return Plugin_Handled;
-}
+// 	ReplyToCommand(client, "%d", IsCarriableObjectiveItem(target));
+// 	return Plugin_Handled;
+// }
 
-public Action OnCmdDumpItems(int client, int args)
-{
-	StringMapSnapshot snap = g_ObjectiveItems.Snapshot();
-	for (int i; i < snap.Length; i++)
-	{
-		char targetname[MAX_TARGETNAME_LEN];
-		snap.GetKey(i, targetname, sizeof(targetname));
-		ReplyToCommand(client, "dump_items: %s", targetname);
-	}
-	delete snap;
-	return Plugin_Handled;
-}
+// public Action OnCmdDumpItems(int client, int args)
+// {
+// 	StringMapSnapshot snap = g_ObjectiveItems.Snapshot();
+// 	for (int i; i < snap.Length; i++)
+// 	{
+// 		char targetname[MAX_TARGETNAME_LEN];
+// 		snap.GetKey(i, targetname, sizeof(targetname));
+// 		ReplyToCommand(client, "dump_items: %s", targetname);
+// 	}
+// 	delete snap;
+// 	return Plugin_Handled;
+// }
 
-public Action OnCmdDumpBackups(int client, int args)
-{
-	StringMapSnapshot snap = entityBackups.Snapshot();
-	for (int i; i < snap.Length; i++)
-	{
-		char targetname[MAX_TARGETNAME_LEN];
-		snap.GetKey(i, targetname, sizeof(targetname));
-		ReplyToCommand(client, "backup: %s", targetname);
-	}
-	delete snap;
-	return Plugin_Handled;
-}
+// public Action OnCmdDumpBackups(int client, int args)
+// {
+// 	StringMapSnapshot snap = entityBackups.Snapshot();
+// 	for (int i; i < snap.Length; i++)
+// 	{
+// 		char targetname[MAX_TARGETNAME_LEN];
+// 		snap.GetKey(i, targetname, sizeof(targetname));
+// 		ReplyToCommand(client, "backup: %s", targetname);
+// 	}
+// 	delete snap;
+// 	return Plugin_Handled;
+// }
 
 public Action OnCmdSoftlock(int client, int args)
 {
@@ -1084,7 +1131,7 @@ void SaveEntity(int entity)
 		return;
 
 	// Refuse to save twice
-	if (entityBackups.ContainsKey(data.targetname))
+	if (entityBackups.GetArray(data.targetname, data, sizeof(data)))
 		return;
 
 	GetEntityClassname(entity, data.classname, sizeof(data.classname));
@@ -1321,7 +1368,7 @@ void SoftlockVoteReset()
 public Action OnCmdCreateSoftlockVote(int client, int args)
 {
 	if (GetActiveVoteIssue() != ISSUE_NONE)
-		ReplyToCommand(client, "Vote already in progress");
+		ReplyToCommand(client, PREFIX ... "Vote already in progress");
 	else
 		CreateSoftlockVote(client);
 
@@ -1496,57 +1543,80 @@ public void ObjectiveBoundary_Finish(Address addr)
 	SDKCall(boundaryFinishFn, addr);
 }
 
-// public Action OnObjectiveComplete(Event event, const char[] name, bool silent)
-// {
-// 	if (!cvAllowSkip.BoolValue || ignoreObjHooks)
-// 		return Plugin_Continue;
+public Action OnObjectiveComplete(Event event, const char[] name, bool silent)
+{
+	if (!cvAllowSkip.BoolValue || ignoreObjHooks)
+		return Plugin_Continue;
 
-// 	Objective pCurObj = objMgr.currentObjective;
-// 	if (!pCurObj)
-// 		return Plugin_Continue;
+	char buffer[PLATFORM_MAX_PATH], objName[256];
+	GetCurrentMap(buffer, sizeof(buffer));
+	event.GetString("name", objName, sizeof(objName));
+	Format(buffer, sizeof(buffer), "%s %s", buffer, objName);
 
-// 	int doneObjIdx = objectiveChain.FindValue(event.GetInt("id"));
-// 	if (doneObjIdx == -1)
-// 	{
-// 		PrintToServer(PREFIX ... "Completed objective not in objective chain. WTF! Ignoring..");
-// 		return Plugin_Continue;
-// 	}
+	// PrintToServer("Objective complete %s", buffer);
 
-// 	int curObjIdx = objectiveChain.FindValue(pCurObj.ID);
-// 	if (curObjIdx == -1)
-// 	{
-// 		PrintToServer(PREFIX ... "Current objective not in objective chain. WTF! Ignoring..");
-// 		return Plugin_Continue;
-// 	}
+	any val;
+	if (skipBlacklist.GetValue(buffer, val))
+	{
+		// PrintToServer("Avoid skipping from %s because it is blacklisted", buffer);
+		return Plugin_Continue;
+	}
 
-// 	int numSkipped = doneObjIdx - curObjIdx;	
-// 	PrintToServer("doneObjIdx = %d, curObjIdx = %d (Skipped %d)", doneObjIdx, curObjIdx, numSkipped);
+	Objective pCurObj = objMgr.currentObjective;
+	if (!pCurObj)
+		return Plugin_Continue;
 
-// 	if (numSkipped > 0)
-// 	{
-// 		PrintToChatAll(PREFIX ... "%t", "Objective Skip");
-// 		ignoreObjHooks = true;
-// 		do 
-// 		{
-// 			objMgr.CompleteCurrentObjective();
-// 			numSkipped--;
-// 		} 
-// 		while (numSkipped);
-// 		ignoreObjHooks = false;
-// 	}
+	int doneObjIdx = objectiveChain.FindValue(event.GetInt("id"));
+	if (doneObjIdx == -1)
+	{
+		PrintToServer(PREFIX ... "Completed objective not in objective chain. WTF! Ignoring..");
+		return Plugin_Continue;
+	}
 
-// 	return Plugin_Continue;
-// }
+	int curObjIdx = objectiveChain.FindValue(pCurObj.ID);
+	if (curObjIdx == -1)
+	{
+		PrintToServer(PREFIX ... "Current objective not in objective chain. WTF! Ignoring..");
+		return Plugin_Continue;
+	}
+
+	int numSkipped = doneObjIdx - curObjIdx;	
+	// PrintToServer("doneObjIdx = %d, curObjIdx = %d (Skipped %d)", doneObjIdx, curObjIdx, numSkipped);
+
+	if (numSkipped > 0)
+	{
+		PrintToChatAll(PREFIX ... "%t", "Objective Skip");
+		ignoreObjHooks = true;
+		do 
+		{
+			objMgr.CompleteCurrentObjective();
+			numSkipped--;
+		} 
+		while (numSkipped);
+		ignoreObjHooks = false;
+	}
+
+	return Plugin_Continue;
+}
 
 public Action OnCmdNext(int client, int args)
 {
 	if (!objMgr)
 	{
-		ReplyToCommand(client, "No running objective detected");
+		ReplyToCommand(client, PREFIX ... "No running objective detected");
 	}
 	else
 	{
 		objMgr.CompleteCurrentObjective();	
 	}
+	return Plugin_Handled;
+}
+
+public Action OnCmdRefreshSkipBlacklist(int client, int args)
+{
+	skipBlacklist.Clear();
+	LoadSkipBlacklist();
+	
+	ReplyToCommand(client, PREFIX ... "Refreshed objective skip blacklist");
 	return Plugin_Handled;
 }
