@@ -28,7 +28,8 @@ For this reason it's disabled by default and a blacklist is included in `configs
 		"nmo_experiment_v3"			"12"
 		"nmo_experiment_v3_fix"		"12"
 	}
-}```
+}
+```
 
 ## Requirements
 - Sourcemod 1.11 or higher
