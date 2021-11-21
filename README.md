@@ -55,5 +55,5 @@ For this reason it's disabled by default and a blacklist is included in `configs
 - `sm_nmoguard_allow_obj_skip`  (1/0) (Default: 0)
   - Whether to allow the objective chain to fix itself after an objective is completed ahead of time
   
-- `sm_nmoguard_allow_item_vote`  (1/0) (Default: 0)
+- `sm_nmoguard_allow_item_vote`  (1/0) (Default: 1)
   - Whether to allow players to vote to recover lost objective items
