@@ -5,7 +5,7 @@ Offers protection against some forms of objective chain breaking, such as unreac
 ## Installation
 
 - [Install Sourcemod](https://wiki.alliedmods.net/Installing_sourcemod)
-- Grab the latest zip from the [releases](https://github.com/dysphie/nmrih-team-healing/releases) section. If running Sourcemod 1.11 or higher, use the `-sm111` zip. You can check your sourcemod version with `sm version`
+- Grab the latest zip from the [releases](https://github.com/dysphie/nmrih-team-healing/releases) section
 - Extract the contents into `addons/sourcemod`
 - Refresh the plugin list (`sm plugins refresh` or `sm plugins load nmo-guard` in server console)
 
