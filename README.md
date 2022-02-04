@@ -2,6 +2,13 @@
 
 Offers protection against some forms of objective chain breaking, such as unreachable items or skips.
 
+## Installation
+
+- [Install Sourcemod](https://wiki.alliedmods.net/Installing_sourcemod)
+- Grab the latest zip from the [releases](https://github.com/dysphie/nmrih-team-healing/releases) section. If running Sourcemod 1.11 or higher, use the `-sm111` zip
+- Extract the contents into `addons/sourcemod`
+- Refresh the plugin list (`sm plugins refresh` or `sm plugins load nmo-guard` in server console)
+
 ## Recovering lost objective items
 
 Players can vote to recover lost objective items via `sm_softlock`. On a successful vote a clone of the lost item will spawn at its original coordinates.
