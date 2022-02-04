@@ -19,7 +19,7 @@ Players can vote to recover lost objective items via `sm_softlock`. On a success
 
 ## Recovering from objective skips
 
-When an objective item is completed ahead of time, the objective chain can attempt to fast-forward itself instead of becoming stuck. 
+When an objective is completed ahead of time, the objective chain can attempt to fast-forward itself instead of becoming stuck. 
 
 This doesn't always work, and can lead to issues on maps that fire "ObjectiveComplete" erroneously.
 For this reason the functionality disabled by default (see CVars) and a blacklist is included in `configs/nmo-guard.cfg`. Objectives listed here won't fast-forward the objective chain if they're completed ahead of time.
