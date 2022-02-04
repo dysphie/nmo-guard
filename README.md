@@ -38,9 +38,6 @@ For this reason the functionality disabled by default (see CVars) and a blacklis
 }
 ```
 
-## Requirements
-- Sourcemod 1.11 or higher
-
 ## Public Commands
 
 - `sm_softlock` or `sm_sl`
