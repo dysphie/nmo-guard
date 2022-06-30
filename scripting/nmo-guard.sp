@@ -992,7 +992,7 @@ void SaveEntity(int entity)
 	data.outputs = GetEntityOutputs(entity);
 	if (data.outputs)
 	{
-		actionsBackup.Push(data.outputs);
+		actionsBackups.Push(data.outputs);
 	}
 
 	entityBackups.SetArray(data.targetname, data, sizeof(data));
