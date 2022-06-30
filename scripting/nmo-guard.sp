@@ -3,20 +3,29 @@
 // #include <profiler>
 #include <textparse>
 #include <sdkhooks>
+#include <vscript_proxy>
+
+#include "nmo-guard/entity-outputs.sp"
+#include "nmo-guard/objective-manager.sp"
+
+#pragma semicolon 1
+#pragma newdecls required
+
 
 // TODO: Ignore entities that haven't been seen by the player
 // TODO: System to manually add/remove entities from vote menu
+
+#define PLUGIN_VERSION "0.3.4"
+#define PLUGIN_DESCRIPTION "Recover lost objective items and handle objective skips gracefully"
 
 public Plugin myinfo = 
 {
 	name = "NMO Guard",
 	author = "Dysphie",
-	description = "Softlock prevention for objective mode",
-	version = "0.3.3",
+	description = PLUGIN_DESCRIPTION,
+	version = PLUGIN_VERSION,
 	url = "https://github.com/dysphie/nmo-guard"
 };
-
-#pragma semicolon 1
 
 #define PREFIX "\x04[NMO Guard]\x01 "
 #define MAX_TARGETNAME_LEN 128
@@ -84,163 +93,20 @@ StringMap skipBlacklist;
 char menuItemSound[PLATFORM_MAX_PATH];
 char menuExitSound[PLATFORM_MAX_PATH];
 
-stock Address operator+(Address base, int off) {
-	return base + view_as<Address>(off);
-}
-
-methodmap AddressBase {
-	property Address addr {
-		public get() { 
-			return view_as<Address>(this); 
-		}
-	}
-}
-
-int offs_UtlVectorSize;
-int offs_UtlVectorElems;
-
-methodmap UtlVector < AddressBase 
-{
-	public UtlVector(Address addr) {
-		return view_as<UtlVector>(addr);
-	}
-
-	property int size 
-	{
-		public get() 
-		{
-			return LoadFromAddress(this.addr + offs_UtlVectorSize, NumberType_Int32);
-		}
-	}
-
-	property Address elements {
-		public get() {
-			return view_as<Address>(LoadFromAddress(this.addr + offs_UtlVectorElems, NumberType_Int32));
-		}
-	}
-
-	public any Get(int idx, int elemSize = 0x4) {
-		return LoadFromAddress(this.elements + idx * elemSize, NumberType_Int32);
-	}
-}
-
-methodmap ObjectiveBoundary < AddressBase {
-
-	public ObjectiveBoundary(Address addr) {
-		return view_as<ObjectiveBoundary>(addr);
-	}
-
-	public void Finish() {
-		ObjectiveBoundary_Finish(this.addr);
-	}
-}
-
-int offs_ObjectiveID;
-int offs_ObjMgrCurObjIdx;
-int offs_ObjMgrCurObj;
-int offs_ObjMgrObjChain;
-
-methodmap Objective < AddressBase 
-{
-	public Objective(Address addr) 
-	{
-		return view_as<Objective>(addr);
-	}
-
-	property int ID 
-	{
-		public get() 
-		{ 
-			return LoadFromAddress(this.addr + offs_ObjectiveID, NumberType_Int32);
-		}
-	}
-}
-
-methodmap ObjectiveManager < AddressBase {
-
-	public ObjectiveManager(Address addr) 
-	{
-		return view_as<ObjectiveManager>(addr);
-	}
-
-	property ObjectiveBoundary currentObjectiveBoundary 
-	{
-		public get() 
-		{
-			Address addr = view_as<Address>(LoadFromAddress(this.addr + 0x7C, NumberType_Int32));
-			return ObjectiveBoundary(addr);
-		}
-	}
-
-	property int currentObjectiveIndex 
-	{
-		public get() 
-		{
-			return LoadFromAddress(this.addr + offs_ObjMgrCurObjIdx, NumberType_Int32);
-		}
-
-		public set(int value) 
-		{
-			StoreToAddress(this.addr + offs_ObjMgrCurObjIdx, value, NumberType_Int32);
-		}
-	}
-
-	property Objective currentObjective 
-	{
-		public get() 
-		{
-			Address addr = view_as<Address>(LoadFromAddress(this.addr + offs_ObjMgrCurObj, NumberType_Int32));
-			return Objective(addr);
-		}
-	}
-
-	public bool GetObjectiveChain(ArrayList arr) 
-	{
-		UtlVector chain = UtlVector(this.addr + offs_ObjMgrObjChain);
-		if (!chain)
-			return false;
-
-		int len = chain.size;
-		for (int i; i < len; i++)
-			arr.Push(chain.Get(i));
-
-		return true;
-	}
-
-	public void StartNextObjective() 
-	{
-		ObjectiveManager_StartNextObjective(this.addr);
-	}
-
-	public void CompleteCurrentObjective() 
-	{
-		ObjectiveBoundary boundary = this.currentObjectiveBoundary;
-		if (boundary)
-			boundary.Finish();
-
-		this.currentObjectiveIndex++;
-		this.StartNextObjective();
-	}
-}
-
-ObjectiveManager objMgr;
-
-Handle boundaryFinishFn;
-Handle startNextObjectiveFn;
-bool ignoreObjHooks;
-ArrayList objectiveChain;
-
-enum struct EntData
+enum struct EntityTemplate
 {
 	int original;
 	// bool usesPhysbox;
+	float mass;
 	char targetname[MAX_TARGETNAME_LEN];
 	char classname[64];
 	char model[PLATFORM_MAX_PATH];
 	float scale;
 	int spawnflags;
+	int skin;
 	float origin[3];
 	float angles[3];
+	ArrayList outputs;
 }
 
 bool CheckCanCallVote(int client)
@@ -355,18 +221,17 @@ enum struct ItemPreview
 
 	void DrawFromList(int client)
 	{	
-		EntData data;
+		EntityTemplate data;
 		this.previews.GetArray(this.cursor, data, sizeof(data));
 
-		// TODO: should pass EntData to Draw? why are we saving the full thing again?
+		// TODO: should pass EntityTemplate to Draw? why are we saving the full thing again?
 		this.Draw(client, data.targetname);
 	}
 
 	void Draw(int client, const char[] targetname)
 	{
 		this.DeletePreviewEntity();
-		// PrintToServer("Draw(%s)", targetname);
-		EntData data;
+		EntityTemplate data;
 
 		if (!entityBackups.GetArray(targetname, data, sizeof(data)))
 			return;
@@ -381,6 +246,7 @@ enum struct ItemPreview
 		DispatchKeyValueFloat(entity, "modelscale", data.scale);
 		DispatchKeyValue(entity, "disablereceiveshadows", "1");
 		DispatchKeyValue(entity, "disableshadows", "1");
+		SetEntProp(entity, Prop_Data, "m_nSkin", data.skin);
 
 		if (!DispatchSpawn(entity))
 			return;
@@ -412,7 +278,6 @@ enum struct ItemPreview
 
 	void DeletePreviewEntity()
 	{
-		// PrintToServer("ItemPreview.DeletePreviewEntity()");
 		int previewEnt = EntRefToEntIndex(this.previewEntRef);
 		if (previewEnt > MaxClients)
 			SafeRemoveEntity(previewEnt);
@@ -428,14 +293,13 @@ enum struct ItemPreview
 			// ThrowError("ItemPreview.GetRenderingName called on struct with no targetnames");
 		}
 
-		EntData data;
+		EntityTemplate data;
 		this.previews.GetArray(this.cursor, data, sizeof(data));
 		strcopy(buffer, maxlen, data.targetname);
 	}
 
 	void Delete()
 	{
-		// PrintToServer("ItemPreview.Delete()");
 		this.DeletePreviewEntity();
 		delete this.previews;
 		this.Init();
@@ -488,7 +352,6 @@ public void OnMapStart()
 
 	controller = EntIndexToEntRef(FindEntityByClassname(-1, "vote_controller"));
 
-	PrecacheModel("models/props/props_junk/watermelon01.mdl");
 	GetCurrentMap(g_MapName, sizeof(g_MapName));
 
 	if (g_Lateloaded)
@@ -525,6 +388,9 @@ public void OnPluginStart()
 
 	cvAllowVote = CreateConVar("sm_nmoguard_allow_item_vote", "1");
 	cvAllowSkip = CreateConVar("sm_nmoguard_allow_obj_skip", "0");
+
+	CreateConVar("nmo_guard_version", PLUGIN_VERSION, PLUGIN_DESCRIPTION,
+    	FCVAR_SPONLY|FCVAR_NOTIFY|FCVAR_DONTRECORD);
 
 	// Handle panel sounds
 	char path[PLATFORM_MAX_PATH];
@@ -593,10 +459,6 @@ public void OnPluginStart()
 	// without these events ever firing. We should SDKHook_Think instead
 	HookEvent("player_extracted", OnPlayerExtracted);
 	HookEvent("player_death", OnPlayerDeath, EventHookMode_Pre);
-
-	// RegConsoleCmd("carry", OnCmdCarry);
-	// RegConsoleCmd("items", OnCmdDumpItems);
-	// RegConsoleCmd("backups", OnCmdDumpBackups);
 
 	AutoExecConfig();
 }
@@ -706,6 +568,9 @@ void LoadGamedata()
 	if(!gamedata)
 		SetFailState("Failed to load gamedata");
 
+	EntityOutputs_LoadGameData(gamedata);
+	ObjectiveManager_LoadGameData(gamedata);
+
 	StartPrepSDKCall(SDKCall_Static);
 	PrepSDKCall_SetFromConf(gamedata, SDKConf_Signature, "CBasePlayer::CanPickupObject");
 	PrepSDKCall_AddParameter(SDKType_CBaseEntity, SDKPass_Pointer);
@@ -716,45 +581,6 @@ void LoadGamedata()
 	if (!hCanPickUpObject)
 		SetFailState("Failed to resolve address of CBasePlayer::CanPickupObject");
 
-	objMgr = ObjectiveManager(gamedata.GetAddress("CNMRiH_ObjectiveManager"));
-	if (!objMgr)
-		SetFailState("Failed to resolve address of CNMRiH_ObjectiveManager");
-
-	StartPrepSDKCall(SDKCall_Raw);
-	PrepSDKCall_SetFromConf(gamedata, SDKConf_Signature, "CNMRiH_ObjectiveBoundary::Finish");
-	boundaryFinishFn = EndPrepSDKCall();
-	if (!boundaryFinishFn)
-		SetFailState("Failed to resolve address of CNMRiH_ObjectiveBoundary::Finish");
-
-	StartPrepSDKCall(SDKCall_Raw);
-	PrepSDKCall_SetFromConf(gamedata, SDKConf_Signature, "CNMRiH_ObjectiveManager::StartNextObjective");
-	startNextObjectiveFn = EndPrepSDKCall();
-	if (!startNextObjectiveFn)
-		SetFailState("Failed to resolve address of CNMRiH_ObjectiveManager::StartNextObjective");
-	
-	offs_ObjectiveID = gamedata.GetOffset("Objective::m_iId");
-	if (offs_ObjectiveID == -1)
-		SetFailState("Failed to resolve offset to Objective::m_iId");
-
-	offs_UtlVectorSize = gamedata.GetOffset("UtlVector::m_Size");
-	if (offs_UtlVectorSize == -1)
-		SetFailState("Failed to resolve offset to UtlVector::m_Size");
-
-	offs_ObjMgrCurObjIdx = gamedata.GetOffset("CNMRiH_ObjectiveManager::_currentObjectiveIndex");
-	if (offs_ObjMgrCurObjIdx == -1)
-		SetFailState("Failed to resolve offset to CNMRiH_ObjectiveManager::_currentObjectiveIndex");
-
-	offs_ObjMgrCurObj = gamedata.GetOffset("CNMRiH_ObjectiveManager::_currentObjective");
-	if (offs_ObjMgrCurObj == -1)
-		SetFailState("Failed to resolve offset to CNMRiH_ObjectiveManager::_currentObjective");
-
-	offs_ObjMgrObjChain = gamedata.GetOffset("CNMRiH_ObjectiveManager::_objectiveChain");
-	if (offs_ObjMgrObjChain == -1)
-		SetFailState("Failed to resolve offset to CNMRiH_ObjectiveManager::_objectiveChain");
-
-	offs_UtlVectorElems = gamedata.GetOffset("UtlVector::m_pElements");
-	if (offs_UtlVectorElems == -1)
-		SetFailState("Failed to resolve offset to UtlVector::m_pElements");
 
 	delete gamedata;
 }
@@ -849,7 +675,7 @@ void GetRecoverableItems(ArrayList arr)
 			char names[MAX_BOUNDARY_ITEMS][MAX_TARGETNAME_LEN];
 			GetBoundaryItemData(boundary, names, colors);
 
-			EntData data;
+			EntityTemplate data;
 			
 			for (int i; i < sizeof(names); i++)
 			{
@@ -921,9 +747,8 @@ public Action OnCmdSoftlock(int client, int args)
 	if (!client || !CheckCanCallVote(client))
 		return Plugin_Handled;
 
-	ArrayList recoverable = new ArrayList(sizeof(EntData));
+	ArrayList recoverable = new ArrayList(sizeof(EntityTemplate));
 	GetRecoverableItems(recoverable);
-	// PrintToServer("There are %d recoverables", recoverable.Length);
 
 	if (recoverable.Length > 0)
 	{
@@ -1013,7 +838,6 @@ public int OnPreviewControls(Menu menu, MenuAction action, int param1, int param
 
 					if (!itemPreview[param1].Validate(param1))
 					{
-						// PrintToServer("Vaidation failed");
 						return 0;
 					}
 
@@ -1126,7 +950,7 @@ void GetBoundaryItemData(int boundary, char names[MAX_BOUNDARY_ITEMS][MAX_TARGET
 
 void SaveEntity(int entity)
 {
-	EntData data;
+	EntityTemplate data;
 	if (!GetEntityTargetname(entity, data.targetname, sizeof(data.targetname)))
 		return;
 
@@ -1143,10 +967,17 @@ void SaveEntity(int entity)
 	data.spawnflags = GetEntProp(entity, Prop_Data, "m_spawnflags");
 	data.scale = GetEntPropFloat(entity, Prop_Send, "m_flModelScale");
 	data.original = EntIndexToEntRef(entity);
+	data.skin = GetEntProp(entity, Prop_Data, "m_nSkin");
+
+	data.mass = RunEntVScriptFloat(entity, "GetMass()");
+
 
 	GetEntPropVector(entity, Prop_Send, "m_vecOrigin", data.origin);
 	GetEntPropVector(entity, Prop_Data, "m_angRotation", data.angles);
 	GetEntPropString(entity, Prop_Data, "m_ModelName", data.model, sizeof(data.model));
+
+	data.outputs = GetEntityOutputs(entity);
+
 	entityBackups.SetArray(data.targetname, data, sizeof(data));
 }
 
@@ -1162,11 +993,9 @@ bool CanBePickedUp(int entity)
 
 bool RestoreEntity(const char[] targetname)
 {
-	EntData data;
+	EntityTemplate data;
 	if (!entityBackups.GetArray(targetname, data, sizeof(data)))
 		return false;
-
-	// PrintToServer("RestoreEntity with spawnflags %d", data.spawnflags);
 
 	// Spawn dummy 
 	int dummy = CreateEntityByName(data.classname);
@@ -1178,10 +1007,19 @@ bool RestoreEntity(const char[] targetname)
 	DispatchKeyValueVector(dummy, "origin", data.origin);
 	DispatchKeyValueVector(dummy, "angles", data.angles);
 	SetEntProp(dummy, Prop_Data, "m_spawnflags", data.spawnflags);
-	DispatchKeyValue(dummy, "massscale", "1");
+	SetEntProp(dummy, Prop_Data, "m_nSkin", data.skin);
+
+	// Restore outputs
+	if (data.outputs) {
+		WriteEntityOutputs(data.outputs, dummy);
+	}
 
 	if (!DispatchSpawn(dummy))
 		return false;
+
+	char massCode[30];
+	FormatEx(massCode, sizeof(massCode), "SetMass(%f)", data.mass);
+	RunEntVScript(dummy, massCode);
 
 	int glowColor;
 	g_ObjectiveItems.GetValue(data.targetname, glowColor);
@@ -1330,11 +1168,11 @@ bool CanRecoverTargetname(const char[] targetname)
 	if (recoverCount >= cvMaxRecoverCount.IntValue)
 		return false;
 
-	ArrayList recoverable = new ArrayList(sizeof(EntData));
+	ArrayList recoverable = new ArrayList(sizeof(EntityTemplate));
 	GetRecoverableItems(recoverable);
 
 	bool result = false;
-	EntData data;
+	EntityTemplate data;
 
 	for (int i; i < recoverable.Length; i++)
 	{
@@ -1553,12 +1391,9 @@ public Action OnObjectiveComplete(Event event, const char[] name, bool silent)
 	event.GetString("name", objName, sizeof(objName));
 	Format(buffer, sizeof(buffer), "%s %s", buffer, objName);
 
-	// PrintToServer("Objective complete %s", buffer);
-
 	any val;
 	if (skipBlacklist.GetValue(buffer, val))
 	{
-		// PrintToServer("Avoid skipping from %s because it is blacklisted", buffer);
 		return Plugin_Continue;
 	}
 
@@ -1569,19 +1404,18 @@ public Action OnObjectiveComplete(Event event, const char[] name, bool silent)
 	int doneObjIdx = objectiveChain.FindValue(event.GetInt("id"));
 	if (doneObjIdx == -1)
 	{
-		PrintToServer(PREFIX ... "Completed objective not in objective chain. WTF! Ignoring..");
+		PrintToServer(PREFIX ... "Completed objective not in objective chain. Ignoring..");
 		return Plugin_Continue;
 	}
 
 	int curObjIdx = objectiveChain.FindValue(pCurObj.ID);
 	if (curObjIdx == -1)
 	{
-		PrintToServer(PREFIX ... "Current objective not in objective chain. WTF! Ignoring..");
+		PrintToServer(PREFIX ... "Current objective not in objective chain. Ignoring..");
 		return Plugin_Continue;
 	}
 
 	int numSkipped = doneObjIdx - curObjIdx;	
-	// PrintToServer("doneObjIdx = %d, curObjIdx = %d (Skipped %d)", doneObjIdx, curObjIdx, numSkipped);
 
 	if (numSkipped > 0)
 	{
@@ -1619,4 +1453,14 @@ public Action OnCmdRefreshSkipBlacklist(int client, int args)
 	
 	ReplyToCommand(client, PREFIX ... "Refreshed objective skip blacklist");
 	return Plugin_Handled;
+}
+
+int GetOffsetOrFail(GameData gamedata, const char[] key)
+{
+	int offset = gamedata.GetOffset(key);
+	if (offset == -1)
+	{
+		SetFailState("Failed to find offset \"%s\"", key);
+	}
+	return offset;
 }

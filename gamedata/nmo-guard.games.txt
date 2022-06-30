@@ -9,7 +9,7 @@
 				"windows"
 				{
 					"signature" "ObjectivesParser::ParseObjectives"				
-					"read" "10"	
+					"read" "24"	
 				}
 
 				"linux"
@@ -21,6 +21,109 @@
 
 		"Offsets"
 		{
+			"CBaseEntity::GetDataDescMap"
+			{
+				"windows" "11"
+				"linux" "12"
+			}
+
+			"datamap_t::dataDesc"
+			{
+				"windows" "0"
+				"linux" "0"
+			}
+
+			"datamap_t::baseMap"
+			{
+				"windows" "12"
+				"linux" "12"
+			}
+
+			"datamap_t::dataNumFields"
+			{
+				"windows" "4"
+				"linux" "4"
+			}
+
+			"typedescription_t::fieldName"
+			{
+				"windows" "4"
+				"linux" "4"
+			}
+
+			"typedescription_t::externalName"
+			{
+				"windows" "20"
+				"linux" "20"
+			}
+
+			"typedescription_t::fieldOffset"
+			{
+				"windows" "8"
+				"linux" "8"
+			}
+
+			"typedescription_t::flags"
+			{
+				"windows" "18"
+				"linux" "18"
+			}
+
+			"sizeof typedescription_t"
+			{
+				"windows" "52"
+				"linux" "52"
+			}
+
+			"CBaseEntityOutput::m_ActionList"
+			{
+				"windows" "20"
+				"linux" "20"
+			}
+
+
+			"CEventAction::m_iTarget"
+			{
+				"windows" "0"
+				"linux" "0"
+			}
+
+			"CEventAction::m_iTargetInput"
+			{
+				"windows" "4"
+				"linux" "4"
+			}
+
+			"CEventAction::m_iParameter"
+			{
+				"windows" "8"
+				"linux" "8"
+			}
+
+			"CEventAction::m_flDelay"
+			{
+				"windows" "12"
+				"linux" "12"
+			}
+
+			"CEventAction::m_nTimesToFire"
+			{
+				"windows" "16"
+				"linux" "16"
+			}
+
+			"CEventAction::m_iIDStamp"
+			{
+				"windows" "20"
+				"linux" "20"
+			}
+
+			"CEventAction::m_pNext"
+			{
+				"windows" "24"
+				"linux" "24"
+			}
+
 			"Objective::m_iId"
 			{
 				"windows"	"0"
@@ -63,7 +166,7 @@
 			"CBasePlayer::CanPickupObject"
 			{
 				"library"	"server"
-				"windows"	"\x55\x8B\xEC\xB8\x08\x10\x00\x00\xE8\x2A\x2A\x2A\x2A\x57"
+				"windows"	"\x55\x8B\xEC\xB8\x10\x10\x00\x00\xE8\x2A\x2A\x2A\x2A\xA1\x2A\x2A\x2A\x2A\x33"
 				"linux"		"@_ZN11CBasePlayer15CanPickupObjectEP11CBaseEntityff"
 			}
 
@@ -85,7 +188,7 @@
 			"ObjectivesParser::ParseObjectives"
 			{
 				"library"	"server"
-				"windows"	"\x55\x8B\xEC\x81\xEC\x40\x01\x00\x00\xB9\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\xFF\x75\x08\x8D\x85\xC0\xFE\xFF\xFF\x68\x2A\x2A\x2A\x2A\x68\x04\x01\x00\x00"
+				"windows"	"\x55\x8B\xEC\x81\xEC\x44\x01\x00\x00\xA1\x2A\x2A\x2A\x2A\x33\xC5\x89\x45\xFC\x56"
 			}
 
 			/* Used to find g_ObjectiveManager on Linux */
