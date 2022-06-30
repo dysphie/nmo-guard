@@ -90,6 +90,8 @@ StringMap g_ObjectiveItems;
 StringMap entityBackups;
 StringMap skipBlacklist;
 
+ArrayList actionsBackups;
+
 char menuItemSound[PLATFORM_MAX_PATH];
 char menuExitSound[PLATFORM_MAX_PATH];
 
@@ -403,6 +405,7 @@ public void OnPluginStart()
 	recoverHistory = new StringMap();
 	objectiveChain = new ArrayList();
 	skipBlacklist = new StringMap();
+	actionsBackups = new ArrayList();
 
 	// prof = new Profiler();
 
@@ -659,9 +662,19 @@ public Action SaveBoundaryItems(Handle timer, int boundaryRef)
 public void OnMapEnd()
 {
 	SoftlockVoteReset();
-	
-	entityBackups.Clear();
+	FlushEntityBackups();
 	g_ObjectiveItems.Clear();
+}
+
+void FlushEntityBackups()
+{
+	entityBackups.Clear();
+
+	for (int i; i < actionsBackups.Length; i++)
+	{
+		ArrayList actions = actionsBackups.Get(i);
+		delete actions;
+	}
 }
 
 void GetRecoverableItems(ArrayList arr)
@@ -977,6 +990,10 @@ void SaveEntity(int entity)
 	GetEntPropString(entity, Prop_Data, "m_ModelName", data.model, sizeof(data.model));
 
 	data.outputs = GetEntityOutputs(entity);
+	if (data.outputs)
+	{
+		actionsBackup.Push(data.outputs);
+	}
 
 	entityBackups.SetArray(data.targetname, data, sizeof(data));
 }
@@ -1052,7 +1069,7 @@ bool RestoreEntity(const char[] targetname)
 
 public Action OnMapReset(Event event, const char[] name, bool dontBroadcast)
 {
-	entityBackups.Clear();
+	FlushEntityBackups();
 	recoverHistory.Clear();
 
 	if (!objMgr)
