@@ -59,8 +59,6 @@ int offs_CEventAction_m_pNext;
 
 void EntityOutputs_LoadGameData(GameData gamedata)
 {
-	//GameData gamedata = new GameData("entityoutputs.games");
-
 	offs_GetDataDescMap           = GetOffsetOrFail(gamedata, "CBaseEntity::GetDataDescMap");
 	offs_dataMap_dataDesc         = GetOffsetOrFail(gamedata, "datamap_t::dataDesc");
 	offs_typedescriptiont_extName = GetOffsetOrFail(gamedata, "typedescription_t::externalName");
@@ -92,7 +90,8 @@ void EntityOutputs_LoadGameData(GameData gamedata)
 
 void WriteEntityOutputs(ArrayList outputsList, int target)
 {
-	for (int i; i < outputsList.Length; i++)
+	int maxOutputs = outputsList.Length;
+	for (int i; i < maxOutputs; i++)
 	{
 		EntOutput output;
 		outputsList.GetArray(i, output);
@@ -102,8 +101,6 @@ void WriteEntityOutputs(ArrayList outputsList, int target)
 			output.externalName, output.target, output.targetinput, output.parameter, output.timesToFire, output.delay);
 		SetVariantString(buffer);
 		AcceptEntityInput(target, "AddOutput", target, target);
-
-		PrintToServer("INJECTIO [%d] %s", target, buffer);
 	}
 }
 

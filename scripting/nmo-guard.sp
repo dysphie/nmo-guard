@@ -1,6 +1,5 @@
 #include <sdktools>
 #include <sdkhooks>
-// #include <profiler>
 #include <textparse>
 #include <sdkhooks>
 #include <vscript_proxy>
@@ -14,6 +13,7 @@
 
 // TODO: Ignore entities that haven't been seen by the player
 // TODO: System to manually add/remove entities from vote menu
+// TODO: Reuse script proxy?
 
 #define PLUGIN_VERSION "0.3.4"
 #define PLUGIN_DESCRIPTION "Recover lost objective items and handle objective skips gracefully"
@@ -51,6 +51,8 @@ public Plugin myinfo =
 #define RECOVER_NOTINBOUNDARY 0
 #define RECOVER_OVER_LIMIT 1
 #define RECOVER_SUCCESS 2
+
+int proxyRef = INVALID_ENT_REFERENCE; // logic_script_proxy reference, used by vscript proxy
 
 ConVar quorumRatio;
 ConVar deadCanVote;
@@ -352,12 +354,30 @@ public void OnMapStart()
 	if (menuItemSound[0])
 		PrecacheSound(menuItemSound);
 
-	controller = EntIndexToEntRef(FindEntityByClassname(-1, "vote_controller"));
+	int controllerIdx = FindEntityByClassname(-1, "vote_controller");
+	if (controllerIdx != -1) {
+		controller = EntIndexToEntRef(controllerIdx);
+	}
 
 	GetCurrentMap(g_MapName, sizeof(g_MapName));
 
+	// FIXME: Re enable, its crashing
 	if (g_Lateloaded)
 		objMgr.GetObjectiveChain(objectiveChain);
+}
+
+int GetPersistentProxy()
+{
+	if (!IsValidEntity(proxyRef))
+	{
+		proxyRef = FindEntityByClassname(-1, "logic_script_proxy");
+		if (!IsValidEntity(proxyRef))
+		{
+			proxyRef = CreateEntityByName("logic_script_proxy");
+			DispatchSpawn(proxyRef);
+		}
+	}
+	return proxyRef;
 }
 
 public void OnClientPutInServer(int client)
@@ -675,6 +695,8 @@ void FlushEntityBackups()
 		ArrayList actions = actionsBackups.Get(i);
 		delete actions;
 	}
+
+	actionsBackups.Clear();
 }
 
 void GetRecoverableItems(ArrayList arr)
@@ -982,7 +1004,7 @@ void SaveEntity(int entity)
 	data.original = EntIndexToEntRef(entity);
 	data.skin = GetEntProp(entity, Prop_Data, "m_nSkin");
 
-	data.mass = RunEntVScriptFloat(entity, "GetMass()");
+	data.mass = RunEntVScriptFloat(entity, "GetMass()", GetPersistentProxy());
 
 
 	GetEntPropVector(entity, Prop_Send, "m_vecOrigin", data.origin);
@@ -1036,7 +1058,7 @@ bool RestoreEntity(const char[] targetname)
 
 	char massCode[30];
 	FormatEx(massCode, sizeof(massCode), "SetMass(%f)", data.mass);
-	RunEntVScript(dummy, massCode);
+	RunEntVScript(dummy, massCode, GetPersistentProxy());
 
 	int glowColor;
 	g_ObjectiveItems.GetValue(data.targetname, glowColor);

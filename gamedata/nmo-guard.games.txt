@@ -9,7 +9,7 @@
 				"windows"
 				{
 					"signature" "ObjectivesParser::ParseObjectives"				
-					"read" "24"	
+					"read" "10"	
 				}
 
 				"linux"
@@ -166,8 +166,8 @@
 			"CBasePlayer::CanPickupObject"
 			{
 				"library"	"server"
-				"windows"	"\x55\x8B\xEC\xB8\x10\x10\x00\x00\xE8\x2A\x2A\x2A\x2A\xA1\x2A\x2A\x2A\x2A\x33"
 				"linux"		"@_ZN11CBasePlayer15CanPickupObjectEP11CBaseEntityff"
+				"windows"	"\x55\x8B\xEC\xB8\x08\x10\x00\x00\xE8\x2A\x2A\x2A\x2A\x57\x8B\x7D"
 			}
 
 			"CNMRiH_ObjectiveBoundary::Finish"
@@ -188,7 +188,7 @@
 			"ObjectivesParser::ParseObjectives"
 			{
 				"library"	"server"
-				"windows"	"\x55\x8B\xEC\x81\xEC\x44\x01\x00\x00\xA1\x2A\x2A\x2A\x2A\x33\xC5\x89\x45\xFC\x56"
+				"windows"	"\x55\x8B\xEC\x81\xEC\x40\x01\x00\x00\xB9\x2A\x2A\x2A\x2A\xE8"
 			}
 
 			/* Used to find g_ObjectiveManager on Linux */

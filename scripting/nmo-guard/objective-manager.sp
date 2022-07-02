@@ -115,13 +115,11 @@ methodmap ObjectiveManager < AddressBase {
 
 	public bool GetObjectiveChain(ArrayList arr) 
 	{
-		PrintToServer("GetObjectiveChain = %x + %x", this.addr, offs_ObjMgrObjChain);
 		UtlVector chain = UtlVector(this.addr + offs_ObjMgrObjChain);
 		if (!chain)
 			return false;
 
 		int len = chain.size;
-		PrintToServer("Objective chain has a size of %d", len);
 		for (int i; i < len; i++)
 			arr.Push(chain.Get(i));
 
