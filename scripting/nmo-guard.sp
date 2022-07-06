@@ -15,8 +15,10 @@
 // TODO: System to manually add/remove entities from vote menu
 // TODO: Reuse script proxy?
 
-#define PLUGIN_VERSION "0.3.4"
+#define PLUGIN_VERSION "0.3.6"
 #define PLUGIN_DESCRIPTION "Recover lost objective items and handle objective skips gracefully"
+
+bool isLinux;
 
 public Plugin myinfo = 
 {
@@ -591,6 +593,8 @@ void LoadGamedata()
 	if(!gamedata)
 		SetFailState("Failed to load gamedata");
 
+	isLinux = GetOffsetOrFail(gamedata, "IsLinux") == 1;
+
 	EntityOutputs_LoadGameData(gamedata);
 	ObjectiveManager_LoadGameData(gamedata);
 
@@ -1011,10 +1015,14 @@ void SaveEntity(int entity)
 	GetEntPropVector(entity, Prop_Data, "m_angRotation", data.angles);
 	GetEntPropString(entity, Prop_Data, "m_ModelName", data.model, sizeof(data.model));
 
-	data.outputs = GetEntityOutputs(entity);
-	if (data.outputs)
+	// This crashes Linux currently, disable until we figure it out
+	if (!isLinux)
 	{
-		actionsBackups.Push(data.outputs);
+		data.outputs = GetEntityOutputs(entity);
+		if (data.outputs)
+		{
+			actionsBackups.Push(data.outputs);
+		}
 	}
 
 	entityBackups.SetArray(data.targetname, data, sizeof(data));
@@ -1049,7 +1057,7 @@ bool RestoreEntity(const char[] targetname)
 	SetEntProp(dummy, Prop_Data, "m_nSkin", data.skin);
 
 	// Restore outputs
-	if (data.outputs) {
+	if (!isLinux && data.outputs) {
 		WriteEntityOutputs(data.outputs, dummy);
 	}
 

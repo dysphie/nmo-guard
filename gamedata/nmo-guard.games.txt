@@ -21,6 +21,13 @@
 
 		"Offsets"
 		{
+			"IsLinux"
+			{
+				"windows" "0"
+				"mac"	"0"
+				"linux" "1"
+			}
+			
 			"CBaseEntity::GetDataDescMap"
 			{
 				"windows" "11"
