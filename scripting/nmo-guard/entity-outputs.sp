@@ -217,6 +217,7 @@ bool GetOutputActions(Address entityAddress, int outputOffset, ArrayList dest, c
 	return true;
 }
 
+// ><(((°>
 int UTIL_StringtToCharArray(Address stringt, char[] buffer, int maxlen)
 {
 	if (stringt == Address_Null)
