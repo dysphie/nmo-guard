@@ -47,7 +47,7 @@
 
 	"Softlock Panel Recover"
 	{
-		"ru"	"Голосование за восстановление"
+		"ru"	"Голос. за восст."
 	}
 
 	"Softlock Panel Exit"
