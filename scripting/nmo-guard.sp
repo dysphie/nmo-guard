@@ -15,7 +15,7 @@
 // TODO: System to manually add/remove entities from vote menu
 // TODO: Reuse script proxy?
 
-#define PLUGIN_VERSION "0.3.7"
+#define PLUGIN_VERSION "0.3.6"
 #define PLUGIN_DESCRIPTION "Recover lost objective items and handle objective skips gracefully"
 
 bool isLinux;
@@ -58,7 +58,6 @@ int proxyRef = INVALID_ENT_REFERENCE; // logic_script_proxy reference, used by v
 
 ConVar quorumRatio;
 ConVar specCanVote;
-ConVar allowSpec;
 
 ConVar cvAllowVote;
 ConVar cvAllowSkip;
@@ -443,12 +442,12 @@ public void OnPluginStart()
 
 	RegConsoleCmd("sm_sl", OnCmdSoftlock);
 	RegConsoleCmd("sm_softlock", OnCmdSoftlock);
+	RegConsoleCmd("sm_bug", OnCmdSoftlock);
 	
 	HookEntityOutput("nmrih_objective_boundary", "OnObjectiveBegin", OnBoundaryBegin);
 
 	quorumRatio = FindConVar("sv_vote_quorum_ratio");
 	specCanVote = FindConVar("sv_vote_allow_spectators");
-	allowSpec = FindConVar("sv_vote_allow_spectators");
 
 	HookEvent("objective_complete", OnObjectiveComplete, EventHookMode_Pre);
 	HookUserMessage(GetUserMessageId("ObjectiveNotify"), OnObjectiveNotify, true);
@@ -1403,7 +1402,7 @@ Action TimerEndVote(Handle timer)
 
 bool CanClientCastVote(int client)
 {
-	return !IsFakeClient(client) && (IsPlayerAlive(client) || allowSpec.BoolValue);
+	return !IsFakeClient(client) && (IsPlayerAlive(client) || specCanVote.BoolValue);
 }
 
 Action ExpireVoteAndDeletePreviews(Handle timer)
