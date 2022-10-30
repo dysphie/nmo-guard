@@ -43,7 +43,7 @@ public Plugin myinfo =
 #define MAXPLAYERS_NMRIH 9
 
 #define ISSUE_NONE -1
-#define ISSUE_SOFTLOCK 9247
+#define ISSUE_SOFTLOCK 4554
 
 #define VOTE_NOT_VOTING -2
 #define VOTE_PENDING -1
@@ -57,8 +57,7 @@ public Plugin myinfo =
 int proxyRef = INVALID_ENT_REFERENCE; // logic_script_proxy reference, used by vscript proxy
 
 ConVar quorumRatio;
-ConVar deadCanVote;
-ConVar allowSpec;
+ConVar specCanVote;
 
 ConVar cvAllowVote;
 ConVar cvAllowSkip;
@@ -126,7 +125,7 @@ bool CheckCanCallVote(int client)
 	if (IsFakeClient(client))
 		return false;
 
-	if (!IsPlayerAlive(client) && !deadCanVote.BoolValue)
+	if (!IsPlayerAlive(client) && !specCanVote.BoolValue)
 	{
 		SendFailStartVote(client, VOTE_FAILED_SPECTATOR, 0);
 		return false;
@@ -335,7 +334,7 @@ bool g_Lateloaded;
 ItemPreview itemPreview[MAXPLAYERS_NMRIH+1];
 
 
-public Action OnPreviewEntTransmit(int entity, int client)
+Action OnPreviewEntTransmit(int entity, int client)
 {
 	if (EntIndexToEntRef(entity) != itemPreview[client].previewEntRef)
 		return Plugin_Handled;
@@ -443,12 +442,12 @@ public void OnPluginStart()
 
 	RegConsoleCmd("sm_sl", OnCmdSoftlock);
 	RegConsoleCmd("sm_softlock", OnCmdSoftlock);
+	RegConsoleCmd("sm_bug", OnCmdSoftlock);
 	
 	HookEntityOutput("nmrih_objective_boundary", "OnObjectiveBegin", OnBoundaryBegin);
 
 	quorumRatio = FindConVar("sv_vote_quorum_ratio");
-	deadCanVote = FindConVar("sv_vote_allow_dead_call_vote");
-	allowSpec = FindConVar("sv_vote_allow_spectators");
+	specCanVote = FindConVar("sv_vote_allow_spectators");
 
 	HookEvent("objective_complete", OnObjectiveComplete, EventHookMode_Pre);
 	HookUserMessage(GetUserMessageId("ObjectiveNotify"), OnObjectiveNotify, true);
@@ -634,7 +633,7 @@ public void OnBoundarySpawned(int boundary)
 	CreateTimer(0.1, SaveBoundaryItems, EntIndexToEntRef(boundary), TIMER_FLAG_NO_MAPCHANGE);
 }
 
-public Action SaveBoundaryItems(Handle timer, int boundaryRef)
+Action SaveBoundaryItems(Handle timer, int boundaryRef)
 {
 	saveBoundItemsTimer = null;
 
@@ -781,7 +780,7 @@ void GetRecoverableItems(ArrayList arr)
 // 	return Plugin_Handled;
 // }
 
-public Action OnCmdSoftlock(int client, int args)
+Action OnCmdSoftlock(int client, int args)
 {
 	if (!client || !CheckCanCallVote(client))
 		return Plugin_Handled;
@@ -1097,7 +1096,7 @@ bool RestoreEntity(const char[] targetname)
 // 	return Plugin_Continue;
 // }
 
-public Action OnMapReset(Event event, const char[] name, bool dontBroadcast)
+Action OnMapReset(Event event, const char[] name, bool dontBroadcast)
 {
 	FlushEntityBackups();
 	recoverHistory.Clear();
@@ -1395,7 +1394,7 @@ void CheckForEarlyVoteClose()
 		CreateTimer(0.2, TimerEndVote, _, TIMER_FLAG_NO_MAPCHANGE);
 }
 
-public Action TimerEndVote(Handle timer)
+Action TimerEndVote(Handle timer)
 {
 	EndVote();
 	return Plugin_Continue;
@@ -1403,17 +1402,17 @@ public Action TimerEndVote(Handle timer)
 
 bool CanClientCastVote(int client)
 {
-	return !IsFakeClient(client) && (IsPlayerAlive(client) || allowSpec.BoolValue);
+	return !IsFakeClient(client) && (IsPlayerAlive(client) || specCanVote.BoolValue);
 }
 
-public Action ExpireVoteAndDeletePreviews(Handle timer)
+Action ExpireVoteAndDeletePreviews(Handle timer)
 {
 	voteTimer = null;
 	EndVote();
 	return Plugin_Continue;
 }
 
-public Action OnObjectiveNotify(UserMsg msg_id, BfRead msg, const int[] players, int playersNum, bool reliable, bool init)
+Action OnObjectiveNotify(UserMsg msg_id, BfRead msg, const int[] players, int playersNum, bool reliable, bool init)
 {
 	return ignoreObjHooks ? Plugin_Handled : Plugin_Continue; 
 }
@@ -1428,7 +1427,7 @@ public void ObjectiveBoundary_Finish(Address addr)
 	SDKCall(boundaryFinishFn, addr);
 }
 
-public Action OnObjectiveComplete(Event event, const char[] name, bool silent)
+Action OnObjectiveComplete(Event event, const char[] name, bool silent)
 {
 	if (!cvAllowSkip.BoolValue || ignoreObjHooks)
 		return Plugin_Continue;
@@ -1480,9 +1479,9 @@ public Action OnObjectiveComplete(Event event, const char[] name, bool silent)
 	return Plugin_Continue;
 }
 
-public Action OnCmdNext(int client, int args)
+Action OnCmdNext(int client, int args)
 {
-	if (!objMgr)
+	if (!objMgr || GameRules_GetProp("_roundState") != 3)
 	{
 		ReplyToCommand(client, PREFIX ... "No running objective detected");
 	}
@@ -1493,7 +1492,7 @@ public Action OnCmdNext(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action OnCmdRefreshSkipBlacklist(int client, int args)
+Action OnCmdRefreshSkipBlacklist(int client, int args)
 {
 	skipBlacklist.Clear();
 	LoadSkipBlacklist();
