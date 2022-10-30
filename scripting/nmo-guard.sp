@@ -54,8 +54,6 @@ public Plugin myinfo =
 #define RECOVER_OVER_LIMIT 1
 #define RECOVER_SUCCESS 2
 
-int proxyRef = INVALID_ENT_REFERENCE; // logic_script_proxy reference, used by vscript proxy
-
 ConVar quorumRatio;
 ConVar specCanVote;
 
@@ -365,20 +363,6 @@ public void OnMapStart()
 	// FIXME: Re enable, its crashing
 	if (g_Lateloaded)
 		objMgr.GetObjectiveChain(objectiveChain);
-}
-
-int GetPersistentProxy()
-{
-	if (!IsValidEntity(proxyRef))
-	{
-		proxyRef = FindEntityByClassname(-1, "logic_script_proxy");
-		if (!IsValidEntity(proxyRef))
-		{
-			proxyRef = CreateEntityByName("logic_script_proxy");
-			DispatchSpawn(proxyRef);
-		}
-	}
-	return proxyRef;
 }
 
 public void OnClientPutInServer(int client)
@@ -1007,7 +991,7 @@ void SaveEntity(int entity)
 	data.original = EntIndexToEntRef(entity);
 	data.skin = GetEntProp(entity, Prop_Data, "m_nSkin");
 
-	data.mass = RunEntVScriptFloat(entity, "GetMass()", GetPersistentProxy());
+	data.mass = RunEntVScriptFloat(entity, "GetMass()");
 
 
 	GetEntPropVector(entity, Prop_Send, "m_vecOrigin", data.origin);
@@ -1065,7 +1049,7 @@ bool RestoreEntity(const char[] targetname)
 
 	char massCode[30];
 	FormatEx(massCode, sizeof(massCode), "SetMass(%f)", data.mass);
-	RunEntVScript(dummy, massCode, GetPersistentProxy());
+	RunEntVScript(dummy, massCode);
 
 	int glowColor;
 	g_ObjectiveItems.GetValue(data.targetname, glowColor);
