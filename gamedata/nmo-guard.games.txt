@@ -79,7 +79,7 @@
 			"sizeof typedescription_t"
 			{
 				"windows" "52"
-				"linux" "52"
+				"linux" "56"
 			}
 
 			"CBaseEntityOutput::m_ActionList"

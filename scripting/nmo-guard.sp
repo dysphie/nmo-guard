@@ -10,15 +10,13 @@
 #pragma semicolon 1
 #pragma newdecls required
 
-
 // TODO: Ignore entities that haven't been seen by the player
 // TODO: System to manually add/remove entities from vote menu
-// TODO: Reuse script proxy?
+// TODO: Revise objective item backup/cloning logic, we should be saving 
+// a glowing entity's entire family tree if at least one parent is pickupable 
 
-#define PLUGIN_VERSION "0.3.6"
+#define PLUGIN_VERSION "0.3.7"
 #define PLUGIN_DESCRIPTION "Recover lost objective items and handle objective skips gracefully"
-
-bool isLinux;
 
 public Plugin myinfo = 
 {
@@ -573,10 +571,9 @@ bool IsCarriableObjectiveItem(int entity)
 void LoadGamedata()
 {
 	GameData gamedata = new GameData("nmo-guard.games");
-	if(!gamedata)
+	if(!gamedata) {
 		SetFailState("Failed to load gamedata");
-
-	isLinux = GetOffsetOrFail(gamedata, "IsLinux") == 1;
+	}
 
 	EntityOutputs_LoadGameData(gamedata);
 	ObjectiveManager_LoadGameData(gamedata);
@@ -998,14 +995,9 @@ void SaveEntity(int entity)
 	GetEntPropVector(entity, Prop_Data, "m_angRotation", data.angles);
 	GetEntPropString(entity, Prop_Data, "m_ModelName", data.model, sizeof(data.model));
 
-	// This crashes Linux currently, disable until we figure it out
-	if (!isLinux)
-	{
-		data.outputs = GetEntityOutputs(entity);
-		if (data.outputs)
-		{
-			actionsBackups.Push(data.outputs);
-		}
+	data.outputs = GetEntityOutputs(entity);
+	if (data.outputs) {
+		actionsBackups.Push(data.outputs);
 	}
 
 	entityBackups.SetArray(data.targetname, data, sizeof(data));
@@ -1040,7 +1032,7 @@ bool RestoreEntity(const char[] targetname)
 	SetEntProp(dummy, Prop_Data, "m_nSkin", data.skin);
 
 	// Restore outputs
-	if (!isLinux && data.outputs) {
+	if (data.outputs) {
 		WriteEntityOutputs(data.outputs, dummy);
 	}
 
