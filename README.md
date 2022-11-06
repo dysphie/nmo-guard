@@ -40,7 +40,7 @@ For this reason the functionality disabled by default (see CVars) and a blacklis
 
 ## Public Commands
 
-- `sm_softlock` or `sm_sl`
+- `sm_softlock` / `sm_sl` / `sm_bug`
   - Displays the softlock recovery interface
 
 ## Admin Commands
