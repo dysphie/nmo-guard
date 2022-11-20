@@ -21,13 +21,7 @@
 
 		"Offsets"
 		{
-			"IsLinux"
-			{
-				"windows" "0"
-				"mac"	"0"
-				"linux" "1"
-			}
-			
+		
 			"CBaseEntity::GetDataDescMap"
 			{
 				"windows" "11"
@@ -181,7 +175,7 @@
 			{
 				"library"	"server"
 				"linux"		"@_ZN24CNMRiH_ObjectiveBoundary6FinishEv"
-				"windows"	"\x55\x8B\xEC\x51\x56\x57\x8B\xF9\xC6\x45\xFF\x00\x8D\x4D\xFF\x8A\x87\xC8\x03\x00\x00"
+				"windows"	"\x55\x8B\xEC\x51\x56\x57\x8B\xF9\xC6\x45\xFF\x00\x8D\x4D\xFF\x8A\x87\xCC\x03\x00\x00"
 			}
 
 			"CNMRiH_ObjectiveManager::StartNextObjective"

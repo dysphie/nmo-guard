@@ -15,7 +15,7 @@
 // TODO: Revise objective item backup/cloning logic, we should be saving 
 // a glowing entity's entire family tree if at least one parent is pickupable 
 
-#define PLUGIN_VERSION "0.3.7"
+#define PLUGIN_VERSION "0.3.8"
 #define PLUGIN_DESCRIPTION "Recover lost objective items and handle objective skips gracefully"
 
 public Plugin myinfo = 
