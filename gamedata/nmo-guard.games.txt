@@ -171,6 +171,13 @@
 				"windows"	"\x55\x8B\xEC\xB8\x08\x10\x00\x00\xE8\x2A\x2A\x2A\x2A\x57\x8B\x7D"
 			}
 
+            "CNMRiH_Objective::GetObjectiveBoundary"
+            {
+                "library"   "server"
+                "windows"   "\x55\x8B\xEC\x51\x53\x8B\x1D\x2A\x2A\x2A\x2A\x56\x57\x8B\xF9\x33\xF6"
+                "linux"     "@_ZNK16CNMRiH_Objective20GetObjectiveBoundaryEv"
+            }
+
 			"CNMRiH_ObjectiveBoundary::Finish"
 			{
 				"library"	"server"
@@ -189,7 +196,7 @@
 			"ObjectivesParser::ParseObjectives"
 			{
 				"library"	"server"
-				"windows"	"\x55\x8B\xEC\x81\xEC\x40\x01\x00\x00\xB9\x2A\x2A\x2A\x2A\xE8"
+				"windows"	"\x55\x8B\xEC\x81\xEC\x40\x02\x00\x00\xB9\x2A\x2A\x2A\x2A"
 			}
 
 			/* Used to find g_ObjectiveManager on Linux */

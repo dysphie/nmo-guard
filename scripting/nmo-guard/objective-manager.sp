@@ -73,6 +73,11 @@ methodmap Objective < AddressBase
 			return LoadFromAddress(this.addr + offs_ObjectiveID, NumberType_Int32);
 		}
 	}
+
+	public ObjectiveBoundary GetObjectiveBoundary()
+	{
+		return Objective_GetObjectiveBoundary(this.addr);
+	}
 }
 
 methodmap ObjectiveManager < AddressBase {
@@ -86,8 +91,7 @@ methodmap ObjectiveManager < AddressBase {
 	{
 		public get() 
 		{
-			Address addr = view_as<Address>(LoadFromAddress(this.addr + 0x7C, NumberType_Int32));
-			return ObjectiveBoundary(addr);
+			return this.currentObjective.GetObjectiveBoundary();
 		}
 	}
 
@@ -133,9 +137,8 @@ methodmap ObjectiveManager < AddressBase {
 
 	public void CompleteCurrentObjective() 
 	{
-		ObjectiveBoundary boundary = this.currentObjectiveBoundary;
-		if (boundary)
-			boundary.Finish();
+		if (this.currentObjective)
+			this.currentObjectiveBoundary.Finish();
 
 		this.currentObjectiveIndex++;
 		this.StartNextObjective();
@@ -144,6 +147,7 @@ methodmap ObjectiveManager < AddressBase {
 
 ObjectiveManager objMgr;
 
+Handle getObjectiveBoundary;
 Handle boundaryFinishFn;
 Handle startNextObjectiveFn;
 bool ignoreObjHooks;
@@ -154,6 +158,13 @@ void ObjectiveManager_LoadGameData(GameData gamedata)
 	objMgr = ObjectiveManager(gamedata.GetAddress("CNMRiH_ObjectiveManager"));
 	if (!objMgr)
 		SetFailState("Failed to resolve address of CNMRiH_ObjectiveManager");
+
+	StartPrepSDKCall(SDKCall_Raw);
+	PrepSDKCall_SetFromConf(gamedata, SDKConf_Signature, "CNMRiH_Objective::GetObjectiveBoundary");
+	PrepSDKCall_SetReturnInfo(SDKType_PlainOldData, SDKPass_Plain);
+	getObjectiveBoundary = EndPrepSDKCall();
+	if (!getObjectiveBoundary)
+		SetFailState("Failed to resolve address of CNMRiH_Objective::GetObjectiveBoundary");
 
 	StartPrepSDKCall(SDKCall_Raw);
 	PrepSDKCall_SetFromConf(gamedata, SDKConf_Signature, "CNMRiH_ObjectiveBoundary::Finish");

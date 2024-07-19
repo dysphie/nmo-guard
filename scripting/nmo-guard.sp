@@ -1403,6 +1403,11 @@ public void ObjectiveBoundary_Finish(Address addr)
 	SDKCall(boundaryFinishFn, addr);
 }
 
+public ObjectiveBoundary Objective_GetObjectiveBoundary(Address addr)
+{
+	return SDKCall(getObjectiveBoundary, addr);
+}
+
 Action OnObjectiveComplete(Event event, const char[] name, bool silent)
 {
 	if (!cvAllowSkip.BoolValue || ignoreObjHooks)
